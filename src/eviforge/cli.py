@@ -58,5 +58,21 @@ def run_api():
     )
 
 
+@app.command("doctor")
+def run_doctor_cmd():
+    """Check availability of forensic tools and dependencies."""
+    from eviforge.doctor import run_doctor
+    
+    report = run_doctor()
+    print(f"[bold]Tools Doctor Report[/bold] (Overall: {'[green]OK[/green]' if report['ok'] else '[red]FAIL[/red]'})")
+    
+    for check in report["checks"]:
+        color = "green" if check["ok"] else "red"
+        print(f"[{color}] {check['name']:<20} : {check['details']} [/{color}]")
+    
+    if not report["ok"]:
+        raise typer.Exit(code=1)
+
+
 def main():
     app()
