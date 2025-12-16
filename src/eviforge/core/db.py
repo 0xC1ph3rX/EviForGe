@@ -26,12 +26,6 @@ class Setting(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
 
 
-class Case(Base):
-    __tablename__ = "cases"
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    name: Mapped[str] = mapped_column(String(400), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
 
 
 def create_session_factory(database_url: str):
