@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import os
+import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from eviforge.core.auth import ack_dependency, get_current_active_user, require_roles, User
@@ -20,34 +22,29 @@ class IngestRequest(BaseModel):
     filename: str  # File must be in the configured /import directory
 
 
-@router.post("/{case_id}/evidence")
-def ingest_evidence(request: Request, case_id: str, req: IngestRequest, _user: User = Depends(require_roles("admin", "analyst"))):
-    settings = load_settings()
-    
-    # Restrict ingest to the /import directory (mapped via docker)
-    # or allow absolute paths if running locally in dev mode
-    # For MVP safety, let's look in expected import path first.
-    
-    # We'll assume an environment variable or default for imports, or just use a convention.
-    # Docker compose maps ./../import -> /import.
-    import_root = Path("/import")
+def _get_import_root() -> Path:
+    import_root = Path(os.getenv("EVIFORGE_IMPORT_DIR", "/import"))
     if not import_root.exists():
-        # Fallback for local dev (cwd/import)
         import_root = Path.cwd() / "import"
-        
-    filename = req.filename.strip()
-    # Enforce safe filename (no path separators)
+    return import_root
+
+
+def _safe_leaf_filename(raw: str) -> str:
+    filename = raw.strip()
     if not filename or filename != Path(filename).name or "/" in filename or "\\" in filename:
         raise HTTPException(status_code=400, detail="Invalid filename")
+    return filename
 
+
+def _ingest_from_import(
+    request: Request, *, case_id: str, filename: str, user: User
+) -> dict:
+    settings = load_settings()
+
+    import_root = _get_import_root()
+    filename = _safe_leaf_filename(filename)
     source_path = (import_root / filename).resolve()
-    
-    # Security check: ensure we haven't traversed out of import_root (unless we want to allow arbitrary paths? User provided "read-only" constraint).
-    # Since this is local tool, maybe arbitrary paths are fine?
-    # "Evidence ingest (copy default)"
-    # Prompt says: "bind mount `./import` for user evidence imports"
-    # So we should default to looking there.
-    
+
     try:
         import_root_resolved = import_root.resolve()
     except Exception:
@@ -67,13 +64,13 @@ def ingest_evidence(request: Request, case_id: str, req: IngestRequest, _user: U
             raise HTTPException(status_code=404, detail="Case not found")
         
         try:
-            evidence = ingest_file(session, settings, case_id, source_path, user=_user.username)
+            evidence = ingest_file(session, settings, case_id, source_path, user=user.username)
 
             try:
                 audit_from_user(
                     session,
                     action="evidence.ingest",
-                    user=_user,
+                    user=user,
                     request=request,
                     case_id=case_id,
                     evidence_id=evidence.id,
@@ -95,6 +92,99 @@ def ingest_evidence(request: Request, case_id: str, req: IngestRequest, _user: U
             raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/{case_id}/evidence")
+def ingest_evidence(request: Request, case_id: str, req: IngestRequest, _user: User = Depends(require_roles("admin", "analyst"))):
+    return _ingest_from_import(request, case_id=case_id, filename=req.filename, user=_user)
+
+
+@router.post("/{case_id}/evidence/ingest")
+def ingest_evidence_alias(request: Request, case_id: str, req: IngestRequest, _user: User = Depends(require_roles("admin", "analyst"))):
+    # Alias for API clients that expect /evidence/ingest
+    return _ingest_from_import(request, case_id=case_id, filename=req.filename, user=_user)
+
+
+@router.post("/{case_id}/evidence/upload")
+def upload_evidence(
+    request: Request,
+    case_id: str,
+    file: UploadFile = File(...),
+    _user: User = Depends(require_roles("admin", "analyst")),
+):
+    settings = load_settings()
+    SessionLocal = create_session_factory(settings.database_url)
+
+    # Uploads can be huge; encourage ingest from /import for very large files.
+    max_bytes = int(os.getenv("EVIFORGE_MAX_UPLOAD_BYTES", str(1024 * 1024 * 1024)))  # 1 GiB default
+
+    safe_name = Path(file.filename or "").name
+    if not safe_name:
+        raise HTTPException(status_code=400, detail="Missing filename")
+
+    upload_dir = settings.data_dir / "uploads"
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    tmp_path = upload_dir / f"{uuid.uuid4()}.upload"
+    total = 0
+
+    try:
+        with tmp_path.open("wb") as out:
+            while True:
+                chunk = file.file.read(1024 * 1024)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > max_bytes:
+                    raise HTTPException(status_code=413, detail=f"Upload too large (>{max_bytes} bytes). Use /import ingest instead.")
+                out.write(chunk)
+    finally:
+        try:
+            file.file.close()
+        except Exception:
+            pass
+
+    with SessionLocal() as session:
+        case = session.get(Case, case_id)
+        if not case:
+            try:
+                tmp_path.unlink(missing_ok=True)
+            except Exception:
+                pass
+            raise HTTPException(status_code=404, detail="Case not found")
+
+        try:
+            evidence = ingest_file(session, settings, case_id, tmp_path, user=_user.username)
+            try:
+                audit_from_user(
+                    session,
+                    action="evidence.upload",
+                    user=_user,
+                    request=request,
+                    case_id=case_id,
+                    evidence_id=evidence.id,
+                    details={"filename": safe_name, "size": evidence.size_bytes, "sha256": evidence.sha256, "md5": evidence.md5},
+                )
+            except Exception:
+                pass
+            session.commit()
+            return {
+                "id": evidence.id,
+                "name": Path(evidence.path).name,
+                "md5": evidence.md5,
+                "sha256": evidence.sha256,
+                "size": evidence.size_bytes,
+            }
+        except HTTPException:
+            session.rollback()
+            raise
+        except Exception as e:
+            session.rollback()
+            raise HTTPException(status_code=500, detail=str(e))
+        finally:
+            try:
+                tmp_path.unlink(missing_ok=True)
+            except Exception:
+                pass
+
+
 @router.get("/{case_id}/evidence")
 def list_case_evidence(case_id: str):
     settings = load_settings()
@@ -114,3 +204,74 @@ def list_case_evidence(case_id: str):
                 "vault_relpath": ev.path
             })
         return res
+
+
+@router.get("/{case_id}/evidence/{evidence_id}")
+def get_evidence_details(case_id: str, evidence_id: str):
+    settings = load_settings()
+    SessionLocal = create_session_factory(settings.database_url)
+
+    with SessionLocal() as session:
+        ev = session.get(Evidence, evidence_id)
+        if not ev or ev.case_id != case_id:
+            raise HTTPException(status_code=404, detail="Evidence not found")
+
+        manifest_path = settings.vault_dir / case_id / "manifests" / f"{evidence_id}.manifest.jsonl"
+        manifest_rel = None
+        if manifest_path.exists():
+            try:
+                manifest_rel = str(manifest_path.relative_to(settings.vault_dir / case_id))
+            except Exception:
+                manifest_rel = str(manifest_path)
+
+        return {
+            "id": ev.id,
+            "case_id": ev.case_id,
+            "filename": Path(ev.path).name,
+            "vault_relpath": ev.path,
+            "size": ev.size_bytes,
+            "ingested_at": ev.ingested_at.isoformat(),
+            "hashes": {"sha256": ev.sha256, "md5": ev.md5},
+            "manifest": {"available": manifest_rel is not None, "path": manifest_rel},
+        }
+
+
+@router.get("/{case_id}/evidence/{evidence_id}/download")
+def download_evidence(
+    request: Request,
+    case_id: str,
+    evidence_id: str,
+    _user: User = Depends(require_roles("admin")),
+):
+    settings = load_settings()
+    SessionLocal = create_session_factory(settings.database_url)
+
+    with SessionLocal() as session:
+        ev = session.get(Evidence, evidence_id)
+        if not ev or ev.case_id != case_id:
+            raise HTTPException(status_code=404, detail="Evidence not found")
+
+        case_root = (settings.vault_dir / case_id).resolve()
+        evidence_root = (case_root / "evidence").resolve()
+        target = (settings.vault_dir / ev.path).resolve()
+
+        if evidence_root not in target.parents:
+            raise HTTPException(status_code=403, detail="Access denied")
+        if not target.exists() or not target.is_file():
+            raise HTTPException(status_code=404, detail="Evidence file missing from vault")
+
+        try:
+            audit_from_user(
+                session,
+                action="evidence.download",
+                user=_user,
+                request=request,
+                case_id=case_id,
+                evidence_id=evidence_id,
+                details={"path": ev.path},
+            )
+            session.commit()
+        except Exception:
+            pass
+
+        return FileResponse(path=str(target), filename=target.name)

@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from eviforge.core.models import Evidence
 from eviforge.core.custody import log_action
+from eviforge.core.custody import append_entry
 from eviforge.config import Settings
 
 
@@ -87,6 +88,22 @@ def ingest_file(
         user, 
         "Evidence Ingested", 
         f"File: {source_path.name}, SHA256: {src_sha256}, UUID: {evidence_id}"
+    )
+
+    # 6. File-based chain-of-custody (tamper-evident hash chain)
+    append_entry(
+        settings.vault_dir / case_id / "chain_of_custody.log",
+        actor=user,
+        action="evidence.ingest",
+        details={
+            "evidence_id": evidence_id,
+            "filename": source_path.name,
+            "source": str(source_path),
+            "vault_relpath": str(dest_path.relative_to(settings.vault_dir)),
+            "size": file_size,
+            "sha256": src_sha256,
+            "md5": src_md5,
+        },
     )
     
     return evidence

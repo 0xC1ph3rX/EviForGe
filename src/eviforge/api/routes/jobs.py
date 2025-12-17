@@ -71,3 +71,45 @@ def get_job_details(job_id: str, current_user: User = Depends(get_current_active
             output_files=output_files,
             error=job.error_message,
         )
+
+
+@router.get("/{job_id}/result")
+def get_job_result(job_id: str, current_user: User = Depends(get_current_active_user)):
+    """
+    Lightweight result endpoint: returns preview + artifact paths.
+    The full raw result is stored in the DB and can be large; clients should
+    use artifact outputs for detailed review.
+    """
+    settings = load_settings()
+    SessionLocal = create_session_factory(settings.database_url)
+
+    with SessionLocal() as session:
+        job = session.get(Job, job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+
+        import json
+
+        preview = None
+        if job.result_preview_json:
+            try:
+                preview = json.loads(job.result_preview_json)
+            except Exception:
+                preview = None
+
+        output_files: list[str] = []
+        if job.output_files_json:
+            try:
+                output_files = json.loads(job.output_files_json) or []
+            except Exception:
+                output_files = []
+
+        return {
+            "job_id": job.id,
+            "case_id": job.case_id,
+            "evidence_id": job.evidence_id,
+            "module": job.tool_name,
+            "status": job.status,
+            "result_preview": preview,
+            "output_files": output_files,
+        }
