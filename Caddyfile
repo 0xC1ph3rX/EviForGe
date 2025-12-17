@@ -3,30 +3,30 @@
 }
 
 :80, {$DOMAIN_NAME:localhost} {
-    # 1. API (including Swagger at /api/docs -> /docs)
-    handle /api/* {
+    # 1. API (FastAPI docs at /api/docs)
+    handle /api* {
         reverse_proxy api:8000
     }
 
     # 2. Documentation Site
-    handle_path /docs/* {
+    handle_path /docs* {
         root * /site
         file_server
     }
 
     # 3. Web UI (Dashboard)
-    handle /web/* {
+    handle /web* {
         reverse_proxy api:8000
+    }
+
+    # Static files (UI assets)
+    handle /static* {
+         reverse_proxy api:8000
     }
 
     # Default Redirect to Dashboard
     handle / {
-        redir /web/ 302
-    }
-    
-    # Static files (if needed by UI)
-    handle_path /static/* {
-         reverse_proxy api:8000
+        redir /web 302
     }
 
     header {

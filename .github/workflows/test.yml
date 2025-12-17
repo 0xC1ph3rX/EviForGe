@@ -6,9 +6,9 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.11'
     - name: Install dependencies
@@ -17,5 +17,14 @@ jobs:
         pip install -e ".[test]"
     - name: Run Tests
       run: |
-        # Skip integration tests that require Docker for now
-        pytest tests/unit
+        python -m pytest -q
+
+  docker-build:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+    - uses: actions/checkout@v4
+    - name: Build Docker images
+      run: |
+        docker build -f docker/api.Dockerfile -t eviforge-api:ci .
+        docker build -f docker/worker.Dockerfile -t eviforge-worker:ci .

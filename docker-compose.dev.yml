@@ -4,12 +4,18 @@ services:
       context: .
       dockerfile: docker/api.Dockerfile
     environment:
+      EVIFORGE_ADMIN_USERNAME: ${EVIFORGE_ADMIN_USERNAME:-admin}
+      EVIFORGE_ADMIN_PASSWORD: ${EVIFORGE_ADMIN_PASSWORD:-}
+      EVIFORGE_SECRET_KEY: ${EVIFORGE_SECRET_KEY:-eviforge-dev-insecure}
       EVIFORGE_DATABASE_URL: postgresql+psycopg://eviforge:eviforge@db:5432/eviforge
       EVIFORGE_REDIS_URL: redis://redis:6379/0
       EVIFORGE_DATA_DIR: /data/misc
       EVIFORGE_VAULT_DIR: /data/cases
       EVIFORGE_BIND_HOST: 0.0.0.0
       EVIFORGE_BIND_PORT: "8000"
+      EVIFORGE_COOKIE_SECURE: "0"
+      EVIFORGE_COOKIE_SAMESITE: "lax"
+      EVIFORGE_TRUST_PROXY: "0"
     ports:
       - "127.0.0.1:8000:8000"
     volumes:
@@ -21,12 +27,20 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests,sys; sys.exit(0 if requests.get('http://127.0.0.1:8000/api/health',timeout=2).status_code==200 else 1)"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
 
   worker:
     build:
       context: .
       dockerfile: docker/worker.Dockerfile
     environment:
+      EVIFORGE_ADMIN_USERNAME: ${EVIFORGE_ADMIN_USERNAME:-admin}
+      EVIFORGE_ADMIN_PASSWORD: ${EVIFORGE_ADMIN_PASSWORD:-}
+      EVIFORGE_SECRET_KEY: ${EVIFORGE_SECRET_KEY:-eviforge-dev-insecure}
       EVIFORGE_DATABASE_URL: postgresql+psycopg://eviforge:eviforge@db:5432/eviforge
       EVIFORGE_REDIS_URL: redis://redis:6379/0
       EVIFORGE_DATA_DIR: /data/misc
@@ -40,6 +54,11 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; from eviforge.config import load_settings; from sqlalchemy import text; from redis import Redis; from eviforge.core.db import create_session_factory; s=load_settings(); Redis.from_url(s.redis_url).ping(); SessionLocal=create_session_factory(s.database_url); ses=SessionLocal(); ses.execute(text('SELECT 1')); ses.close(); sys.exit(0)"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
 
   db:
     image: postgres:16

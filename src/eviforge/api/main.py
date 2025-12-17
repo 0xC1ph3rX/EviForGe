@@ -23,18 +23,28 @@ async def lifespan(app: FastAPI):
     # Startup: Ensure DB tables exist
     settings = load_settings()
     SessionLocal = create_session_factory(settings.database_url)
-    try:
-        from eviforge.core.auth import ensure_bootstrap_admin
+    from eviforge.core.auth import ensure_bootstrap_admin
+    from eviforge.core.models import User as DbUser
 
-        with SessionLocal() as session:
-            ensure_bootstrap_admin(session)
-    except Exception:
-        pass
+    with SessionLocal() as session:
+        ensure_bootstrap_admin(session)
+        # If the platform has no users, fail fast with a clear operator message.
+        # This avoids booting into an unusable (or insecure) state.
+        if session.query(DbUser).count() == 0:
+            raise RuntimeError(
+                "No users exist. Set EVIFORGE_ADMIN_PASSWORD to bootstrap an admin user on first run."
+            )
     yield
     # Shutdown
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="EviForge", lifespan=lifespan)
+    app = FastAPI(
+        title="EviForge",
+        lifespan=lifespan,
+        docs_url="/api/docs",
+        redoc_url="/api/redoc",
+        openapi_url="/api/openapi.json",
+    )
 
     # API
     app.include_router(health_router, prefix="/api")
