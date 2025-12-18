@@ -72,7 +72,20 @@
                     const next = (new URLSearchParams(window.location.search)).get('next');
                     window.location.href = next || '/web';
                 } else {
-                    errDiv.innerText = "Invalid credentials";
+                    let msg = "Login failed";
+                    try {
+                        const data = await res.json();
+                        if (res.status === 503 && data && data.detail && data.detail.error === 'setup_required') {
+                            msg = "Setup required: create the first admin user at /web/setup (or set EVIFORGE_ADMIN_PASSWORD and restart).";
+                        } else if (res.status === 429) {
+                            msg = "Too many attempts; try again later.";
+                        } else if (res.status === 401) {
+                            msg = "Invalid credentials";
+                        } else if (data && data.detail) {
+                            msg = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail);
+                        }
+                    } catch (e) { }
+                    errDiv.innerText = msg;
                     errDiv.style.display = 'block';
                 }
             } catch (err) {
@@ -80,6 +93,20 @@
                 errDiv.style.display = 'block';
             }
         }
+
+        // Proactive hint if no users exist
+        (async function () {
+            try {
+                const res = await fetch('/api/auth/bootstrap/status');
+                if (!res.ok) return;
+                const data = await res.json();
+                if (data && data.setup_required) {
+                    const errDiv = document.getElementById('errorMsg');
+                    errDiv.innerText = "First-run setup required: open /web/setup to create the first admin user (or set EVIFORGE_ADMIN_PASSWORD and restart).";
+                    errDiv.style.display = 'block';
+                }
+            } catch { }
+        })();
     </script>
 </body>
 

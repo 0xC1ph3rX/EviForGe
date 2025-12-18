@@ -28,12 +28,10 @@ async def lifespan(app: FastAPI):
 
     with SessionLocal() as session:
         ensure_bootstrap_admin(session)
-        # If the platform has no users, fail fast with a clear operator message.
-        # This avoids booting into an unusable (or insecure) state.
-        if session.query(DbUser).count() == 0:
-            raise RuntimeError(
-                "No users exist. Set EVIFORGE_ADMIN_PASSWORD to bootstrap an admin user on first run."
-            )
+        try:
+            app.state.setup_required = session.query(DbUser).count() == 0
+        except Exception:
+            app.state.setup_required = True
     yield
     # Shutdown
 

@@ -1,4 +1,5 @@
 import os
+import re
 import time
 from datetime import datetime, timedelta
 from typing import Annotated
@@ -16,6 +17,7 @@ from eviforge.core.auth import (
     create_access_token,
     get_current_active_user,
     verify_password,
+    get_password_hash,
 )
 from eviforge.core.db import create_session_factory, get_setting, set_setting
 from eviforge.core.models import User
@@ -25,6 +27,7 @@ from eviforge.config import ACK_TEXT, load_settings
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 _MEM_RATE_LIMIT: dict[str, tuple[int, float]] = {}
+USERNAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{1,48}[a-zA-Z0-9]$")
 
 
 def _client_ip(request: Request) -> str:
@@ -72,10 +75,77 @@ def _enforce_login_rate_limit(request: Request, *, redis_url: str) -> None:
         if count > limit:
             raise HTTPException(status_code=429, detail="Too many login attempts. Try again later.")
 
+def _setup_enabled() -> bool:
+    return os.getenv("EVIFORGE_SETUP_ENABLED", "0") == "1"
+
 
 class AckRequest(BaseModel):
     text: str
     actor: str = "local"
+
+class BootstrapRequest(BaseModel):
+    username: str = "admin"
+    password: str
+
+
+@router.get("/bootstrap/status")
+def bootstrap_status(request: Request):
+    settings = load_settings()
+    SessionLocal = create_session_factory(settings.database_url)
+    with SessionLocal() as session:
+        count = session.query(User).count()
+    return {
+        "setup_required": count == 0,
+        "setup_enabled": _setup_enabled(),
+        "hint": "Set EVIFORGE_ADMIN_PASSWORD and restart, or use /web/setup (dev) to create the first admin user.",
+    }
+
+
+@router.post("/bootstrap")
+def bootstrap_admin(request: Request, req: BootstrapRequest):
+    """
+    Create the first admin user (dev convenience).
+
+    Safety: only enabled when EVIFORGE_SETUP_ENABLED=1.
+    Production guidance: set EVIFORGE_ADMIN_PASSWORD and EVIFORGE_SECRET_KEY in .env and restart.
+    """
+    if not _setup_enabled():
+        raise HTTPException(status_code=403, detail={"error": "setup_disabled", "hint": "Set EVIFORGE_SETUP_ENABLED=1 (dev only) or bootstrap via env vars."})
+
+    username = req.username.strip() or "admin"
+    if not USERNAME_RE.match(username):
+        raise HTTPException(status_code=400, detail="Invalid username (use 3-50 chars: letters, digits, . _ -)")
+    if len(req.password) < 12:
+        raise HTTPException(status_code=400, detail="Password too short (min 12 chars)")
+
+    settings = load_settings()
+    SessionLocal = create_session_factory(settings.database_url)
+    with SessionLocal() as session:
+        if session.query(User).count() != 0:
+            raise HTTPException(status_code=409, detail="Users already exist")
+
+        u = User(username=username, hashed_password=get_password_hash(req.password), role="admin", is_active=True)
+        session.add(u)
+        session.commit()
+
+        try:
+            audit_from_user(
+                session,
+                action="auth.bootstrap",
+                user=u,
+                request=request,
+                details={"note": "First admin user created via bootstrap endpoint"},
+            )
+            session.commit()
+        except Exception:
+            pass
+
+    try:
+        request.app.state.setup_required = False
+    except Exception:
+        pass
+
+    return {"ok": True, "username": username, "role": "admin"}
 
 
 @router.get("/ack/status")
@@ -111,6 +181,15 @@ async def login_for_access_token(
     SessionLocal = create_session_factory(settings.database_url)
     
     with SessionLocal() as session:
+        if session.query(User).count() == 0:
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "error": "setup_required",
+                    "hint": "No users exist. Set EVIFORGE_ADMIN_PASSWORD and restart, or open /web/setup (dev) to create the first admin user.",
+                },
+            )
+
         user = session.query(User).filter(User.username == form_data.username).first()
         
         if not user or not verify_password(form_data.password, user.hashed_password):

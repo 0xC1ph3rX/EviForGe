@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+
+{% block title %}Setup - EviForge{% endblock %}
+
+{% block content %}
+<div style="min-height:auto; display:block;">
+  <div class="flex between mb-4">
+    <div>
+      <div class="text-sm text-muted"><a href="/web">Dashboard</a> / Setup</div>
+      <h2 class="mt-1">First-Run Setup</h2>
+    </div>
+    <span class="badge badge-warning">Setup Required</span>
+  </div>
+
+  <div class="card">
+    <h3>Why you’re seeing this</h3>
+    <div class="text-muted text-sm">
+      EviForge has no users yet. Create the first admin user to proceed.
+    </div>
+  </div>
+
+  <div class="layout-grid" style="grid-template-columns: 1fr 1fr; gap: 1.5rem; display:grid;">
+    <div class="card">
+      <h3>Recommended (Docker)</h3>
+      <div class="text-sm">
+        Set these in <code>.env</code>, then restart:
+        <pre class="pre-block">EVIFORGE_ADMIN_PASSWORD=&lt;long passphrase&gt;
+EVIFORGE_SECRET_KEY=&lt;long random secret&gt;</pre>
+        <div class="text-muted text-sm">
+          Then run: <code>sudo docker compose up -d --build</code>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Dev Convenience (UI Bootstrap)</h3>
+      <div class="text-muted text-sm">
+        This is disabled by default. Enable it only for local dev by setting:
+        <code>EVIFORGE_SETUP_ENABLED=1</code>
+      </div>
+
+      <div id="bootstrapStatus" class="text-muted text-sm mt-2">Checking…</div>
+
+      <form id="bootstrapForm" class="mt-2" style="display:none;">
+        <div class="flex" style="flex-wrap:wrap; gap:0.5rem;">
+          <input id="bootstrapUsername" placeholder="admin username" value="admin" required>
+          <input id="bootstrapPassword" type="password" placeholder="password (min 12 chars)" required>
+          <button class="btn btn-primary" type="submit">Create Admin</button>
+        </div>
+        <div id="bootstrapMsg" class="text-muted text-sm mt-2"></div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  async function loadBootstrapStatus() {
+    const el = document.getElementById('bootstrapStatus');
+    const form = document.getElementById('bootstrapForm');
+    const res = await fetch('/api/auth/bootstrap/status');
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      el.textContent = 'Failed to check setup status.';
+      return;
+    }
+    if (!data.setup_required) {
+      el.textContent = 'Setup complete. Redirecting to login…';
+      setTimeout(() => window.location.href = '/web/login', 700);
+      return;
+    }
+    if (!data.setup_enabled) {
+      el.innerHTML = 'Bootstrap disabled. Set <code>EVIFORGE_SETUP_ENABLED=1</code> and restart, or bootstrap via <code>.env</code>.';
+      form.style.display = 'none';
+      return;
+    }
+    el.textContent = 'Bootstrap enabled. Create the first admin user below.';
+    form.style.display = 'block';
+  }
+
+  document.getElementById('bootstrapForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const msg = document.getElementById('bootstrapMsg');
+    msg.textContent = 'Creating…';
+    const username = document.getElementById('bootstrapUsername').value;
+    const password = document.getElementById('bootstrapPassword').value;
+    const res = await fetch('/api/auth/bootstrap', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      msg.textContent = (data && data.detail && (data.detail.hint || data.detail.error || data.detail)) ? JSON.stringify(data.detail) : 'Failed';
+      return;
+    }
+    msg.textContent = 'Admin created. Redirecting to login…';
+    setTimeout(() => window.location.href = '/web/login', 700);
+  });
+
+  loadBootstrapStatus();
+</script>
+{% endblock %}
+

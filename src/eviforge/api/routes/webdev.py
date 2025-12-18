@@ -53,6 +53,8 @@ async def web_index(request: Request):
     """
     Serve the main case dashboard.
     """
+    if getattr(request.app.state, "setup_required", False):
+        return RedirectResponse(url="/web/setup", status_code=302)
     return templates.TemplateResponse("index.html", {"request": request})
 
 
@@ -73,6 +75,10 @@ async def web_ack(request: Request):
 @router.get("/osint", response_class=HTMLResponse)
 async def web_osint(request: Request):
     return templates.TemplateResponse("osint.html", {"request": request})
+
+@router.get("/setup", response_class=HTMLResponse)
+async def web_setup(request: Request):
+    return templates.TemplateResponse("setup.html", {"request": request})
 
 
 def _redact_url(url: str) -> str:
