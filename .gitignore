@@ -21,3 +21,6 @@ artifacts/
 *.log
 *.sqlite
 *.db
+.eviforge/
+core
+core.*

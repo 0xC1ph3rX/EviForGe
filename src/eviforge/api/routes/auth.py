@@ -1,7 +1,7 @@
 import os
 import re
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -166,7 +166,7 @@ def ack(req: AckRequest):
     settings.data_dir.mkdir(parents=True, exist_ok=True)
     SessionLocal = create_session_factory(settings.database_url)
     with SessionLocal() as session:
-        set_setting(session, "authorization_ack", {"text": req.text, "actor": req.actor, "ts": datetime.utcnow().isoformat()})
+        set_setting(session, "authorization_ack", {"text": req.text, "actor": req.actor, "ts": datetime.now(timezone.utc).isoformat()})
 
     (settings.data_dir / "authorization.txt").write_text(req.text + "\n", encoding="utf-8")
     return {"acknowledged": True}

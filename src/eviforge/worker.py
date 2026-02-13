@@ -9,6 +9,7 @@ from datetime import timezone
 from io import StringIO
 from pathlib import Path
 from typing import Any, Type
+import threading
 
 from redis import Redis
 from rq import Queue, Worker
@@ -191,6 +192,12 @@ def execute_module_task(job_id: str) -> dict[str, Any]:
 
             @contextmanager
             def alarm_ctx():
+                if not hasattr(signal, "SIGALRM") or threading.current_thread() is not threading.main_thread():
+                    # Inline fallback execution may run in a background thread where
+                    # SIGALRM is unavailable/unsupported.
+                    yield
+                    return
+
                 def handler(_signum, _frame):
                     raise _Timeout(f"Job timed out after {timeout_seconds}s")
 

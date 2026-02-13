@@ -1,19 +1,22 @@
 import os
+import re
 import shutil
-import uuid
 from typing import List, Optional
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
-from pydantic import BaseModel
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from pydantic import BaseModel, ConfigDict
 
 from eviforge.core.db import create_session_factory
 from eviforge.core.models import OSINTAction, OSINTActionStatus, Case
-from eviforge.core.auth import get_current_active_user, User
+from eviforge.core.auth import ack_dependency, get_current_active_user, User
 from eviforge.core.custody import log_action
 from eviforge.config import load_settings
 
-router = APIRouter(prefix="/cases/{case_id}/osint", tags=["osint"])
+router = APIRouter(
+    prefix="/cases/{case_id}/osint",
+    tags=["osint"],
+    dependencies=[Depends(ack_dependency), Depends(get_current_active_user)],
+)
 
 # --- Pydantic Models ---
 class OSINTActionCreate(BaseModel):
@@ -24,6 +27,7 @@ class OSINTActionCreate(BaseModel):
 
 class OSINTActionUpdate(BaseModel):
     status: Optional[OSINTActionStatus] = None
+    target_label: Optional[str] = None
     tracking_url: Optional[str] = None
     notes: Optional[str] = None
 
@@ -39,8 +43,7 @@ class OSINTActionResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 # --- Attributes ---
 # Use the common DB session pattern
@@ -50,7 +53,14 @@ def list_actions(case_id: str, current_user: User = Depends(get_current_active_u
     settings = load_settings()
     SessionLocal = create_session_factory(settings.database_url)
     with SessionLocal() as session:
-        actions = session.query(OSINTAction).filter(OSINTAction.case_id == case_id).all()
+        if not session.get(Case, case_id):
+            raise HTTPException(status_code=404, detail="Case not found")
+        actions = (
+            session.query(OSINTAction)
+            .filter(OSINTAction.case_id == case_id)
+            .order_by(OSINTAction.updated_at.desc())
+            .all()
+        )
         return actions
 
 @router.post("/actions", response_model=OSINTActionResponse)
@@ -62,19 +72,30 @@ def create_action(case_id: str, action: OSINTActionCreate, current_user: User = 
         if not session.get(Case, case_id):
             raise HTTPException(status_code=404, detail="Case not found")
 
+        provider = (action.provider or "").strip()
+        action_type = (action.action_type or "").strip()
+        target_label = (action.target_label or "").strip() or None
+        notes = (action.notes or "").strip() or None
+        if not provider:
+            raise HTTPException(status_code=400, detail="provider is required")
+        if not action_type:
+            raise HTTPException(status_code=400, detail="action_type is required")
+        if len(provider) > 100 or len(action_type) > 100:
+            raise HTTPException(status_code=400, detail="provider/action_type too long")
+
         new_action = OSINTAction(
             case_id=case_id,
-            provider=action.provider,
-            action_type=action.action_type,
-            target_label=action.target_label,
-            notes=action.notes,
+            provider=provider,
+            action_type=action_type,
+            target_label=target_label,
+            notes=notes,
             status=OSINTActionStatus.DRAFT
         )
         session.add(new_action)
         session.flush() # get ID
         
         # Log chain of custody
-        log_action(session, case_id, current_user.username, "OSINT Action Created", f"Provider: {action.provider}, Type: {action.action_type}")
+        log_action(session, case_id, current_user.username, "OSINT Action Created", f"Provider: {provider}, Type: {action_type}")
         
         session.commit()
         session.refresh(new_action)
@@ -94,11 +115,14 @@ def update_action(case_id: str, action_id: str, updates: OSINTActionUpdate, curr
         if updates.status:
             db_action.status = updates.status
             changes.append(f"Status->{updates.status}")
+        if updates.target_label is not None:
+            db_action.target_label = updates.target_label.strip() or None
+            changes.append("Target Updated")
         if updates.tracking_url is not None:
             db_action.tracking_url = updates.tracking_url
             changes.append(f"TrackingURL Updated")
         if updates.notes is not None:
-            db_action.notes = updates.notes
+            db_action.notes = updates.notes.strip() or None
              # Don't log full notes change to custody, maybe too verbose? Just say 'Notes Updated'
             changes.append("Notes Updated")
             
@@ -129,6 +153,8 @@ def upload_attachment(case_id: str, action_id: str, file: UploadFile = File(...)
         # Let's verify vault structure logic.
         
         case = session.get(Case, case_id)
+        if not case:
+            raise HTTPException(status_code=404, detail="Case not found")
         # We need the vault path.
         vault_root = settings.vault_dir # usually /data/cases or ./cases locally
         
@@ -143,7 +169,9 @@ def upload_attachment(case_id: str, action_id: str, file: UploadFile = File(...)
         # Let's assume `settings.vault_dir` + `case_id` is the container path logic.
         
         # Construct path
-        safe_provider = "".join(x for x in db_action.provider if x.isalnum())
+        safe_provider = re.sub(r"[^a-zA-Z0-9._-]", "_", db_action.provider).strip("._-")
+        if not safe_provider:
+            safe_provider = "unknown_provider"
         # Folder: artifacts/osint/privacy/<provider>
         
         # We'll put it in `settings.vault_dir / case_id / "artifacts" / "osint" / safe_provider`
@@ -152,10 +180,11 @@ def upload_attachment(case_id: str, action_id: str, file: UploadFile = File(...)
         target_dir = os.path.join(vault_root, case_id, "artifacts", "osint", safe_provider)
         os.makedirs(target_dir, exist_ok=True)
         
-        filename = os.path.basename(file.filename)
+        filename = os.path.basename(file.filename or "")
         # Security: sanitize filename
-        import re
         filename = re.sub(r'[^a-zA-Z0-9_\-\.]', '_', filename)
+        if not filename:
+            raise HTTPException(status_code=400, detail="Invalid filename")
         
         final_path = os.path.join(target_dir, filename)
         

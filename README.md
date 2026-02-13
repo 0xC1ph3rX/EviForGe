@@ -1,88 +1,166 @@
 # EviForge
 
-EviForge is a **local-first, offline-capable** DFIR evidence platform with a server-rendered web UI, REST API, and a background worker pipeline for forensic modules. It is designed for **authorized, defensive** investigations only.
+EviForge is a local-first DFIR platform for authorized investigations:
+- FastAPI API + web UI
+- Forensic module pipeline (inventory, strings, timeline, triage, pcap, evtx, yara, etc.)
+- Chain-of-custody logging and audit logging
+- New native desktop interface (`PySide6/Qt`) with Wireshark-style workflow
 
-## Safety / scope (non-negotiable)
+## Safety and Scope
 
-- Authorized use only. First run requires acknowledgement: “I confirm I have legal authorization to process this evidence.”
-- No offensive features: no exploitation, persistence, stealth, credential theft, or bypassing access controls.
-- Evidence is treated as **read-only**: ingest copies evidence into the case vault; analysis operates on the copied vault.
-- Offline-first: no telemetry; no cloud uploads.
+- Authorized defensive/forensic use only.
+- No offensive features (no stealth/persistence/exploitation).
+- Evidence is copied into the vault and treated read-only.
+- Offline-first; no telemetry or cloud upload.
 
-## Quickstart (Docker, local)
+## What Was Fixed/Completed
 
-1) Create `.env`:
-```bash
-cp .env.example .env
-```
-Edit `.env` and set at least:
-- `EVIFORGE_ADMIN_PASSWORD` (long passphrase)
-- `EVIFORGE_SECRET_KEY` (long random secret)
+- Fixed `/web/admin` crash caused by stale audit-log field names.
+- Added real dashboard stats endpoint (`/api/cases/stats/overview`) and wired web dashboard cards.
+- Added resilient job execution mode:
+  - `EVIFORGE_JOB_EXECUTION=queue` (strict Redis/RQ)
+  - `EVIFORGE_JOB_EXECUTION=inline` (runs jobs in-process)
+  - `EVIFORGE_JOB_EXECUTION=auto` (queue first, fallback inline)
+- Added native desktop app with:
+  - Toolbar actions: Open Case, Import Evidence, Run Analysis, Export Results, Settings/Profiles
+  - Left panel: cases, evidence, modules, jobs
+  - Center panel: artifact/event table
+  - Right panel: structured JSON details
+  - Search/filter bar for fast triage
+- Included OSINT API router in app wiring (was present in code but not mounted).
+- Modernized deprecations:
+  - Pydantic `ConfigDict(from_attributes=True)`
+  - timezone-aware UTC timestamps
+- Added `python -m eviforge.cli` execution guard.
+- Added regression/feature tests for admin page, stats, inline jobs, and desktop backend.
 
-2) Start the stack (Docker may require `sudo`):
-```bash
-sudo docker compose up -d --build
-```
-
-3) Open:
-- Web UI: `http://127.0.0.1:8000/web`
-- API docs: `http://127.0.0.1:8000/api/docs`
-- Health: `http://127.0.0.1:8000/api/health`
-
-4) First run flow:
-- Login at `/web/login` (username `admin`, password from `.env`)
-- Complete the authorization acknowledgement at `/web/ack`
-- Create a case → ingest evidence (from `./import` or upload) → run a module → browse artifacts
-
-## Production (Caddy reverse proxy)
-
-```bash
-cp .env.example .env
-# Set: DOMAIN_NAME, POSTGRES_PASSWORD, EVIFORGE_DATABASE_URL, EVIFORGE_SECRET_KEY, EVIFORGE_ADMIN_PASSWORD
-sudo docker compose -f docker-compose.prod.yml up -d --build
-```
-
-## Architecture (text diagram)
-
-- `api` (FastAPI): REST API + server-rendered UI (`/web`) + static assets (`/static`)
-- `worker` (RQ): executes module jobs and writes outputs under the case vault
-- `db` (Postgres): users, cases, evidence, jobs, audit logs, findings
-- `redis`: job queue + (optional) rate-limit storage
-- `tika` (optional): document parsing for `parse_text`
-- `vault` (filesystem): evidence copies + artifacts per case
-
-## API summary
-
-- Auth:
-  - `POST /api/auth/token` (login)
-  - `POST /api/auth/ack` (authorization acknowledgement)
-- Cases:
-  - `GET /api/cases`
-  - `POST /api/cases`
-  - `GET /api/cases/{case_id}`
-- Evidence:
-  - `GET /api/cases/{case_id}/evidence`
-  - `POST /api/cases/{case_id}/evidence` (ingest from `/import`)
-  - `POST /api/cases/{case_id}/evidence/upload` (multipart upload → ingest)
-- Jobs:
-  - `POST /api/cases/{case_id}/jobs`
-  - `GET /api/cases/{case_id}/jobs`
-  - `GET /api/jobs/{job_id}`
-- Artifacts:
-  - `GET /api/cases/{case_id}/artifacts/tree?path=...`
-  - `GET /api/cases/{case_id}/artifacts/file?path=...`
-
-## Forensic defensibility
-
-- Evidence copy verification: MD5 + SHA-256 computed at ingest.
-- Chain-of-custody: append-only, hash-chained `chain_of_custody.log` per case.
-- Audit log: API actions recorded in the database (best-effort).
-
-## Development
+## Quickstart (Local venv)
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install -e ".[test]"
-python -m pytest -q
+pip install -e ".[test,desktop]"
 ```
+
+Run tests:
+```bash
+pytest -q
+```
+
+Run API server:
+```bash
+eviforge api
+```
+
+If port `8000` is already in use, run on another port:
+```bash
+eviforge api --port 8001
+```
+
+Open:
+- Web UI: `http://127.0.0.1:8000/web`
+- API docs: `http://127.0.0.1:8000/api/docs`
+- Root path: `http://127.0.0.1:8000/` (redirects to `/web`)
+- Admin tools panel: login as admin and open `/web/admin` to see all detected tools and registered forensic modules.
+- OSINT tool tracker: open `/web/osint` for case-linked action tracking (provider/type/status/attachments).
+- OSINT runtime toolkit panel: `/web/osint` now includes local OSINT/DNS/HTTP tool availability graph + searchable table.
+
+Local admin login (panel):
+```bash
+cp .env.example .env
+eviforge api
+```
+- Default local credentials from `.env.example`: `admin / admin`
+- `.env` is loaded automatically on startup.
+- Existing `admin` users are auto-reconciled to admin role/password from env (`EVIFORGE_ENFORCE_ENV_ADMIN=1`, default).
+
+## Repository Cleanup
+
+Dry-run cleanup of local/runtime artifacts:
+```bash
+bash scripts/clean_repo_artifacts.sh
+```
+
+Apply cleanup:
+```bash
+bash scripts/clean_repo_artifacts.sh --apply
+```
+
+This cleanup intentionally preserves tracked project assets and non-targets such as:
+- `.venv/`
+- `verify_expansion.py`
+
+## Desktop UI
+
+Start desktop app:
+```bash
+eviforge-desktop
+```
+
+Desktop workflow:
+1. Open/import evidence from the top toolbar.
+2. Use the Wireshark-style filter bar (`preset + query + apply/clear`).
+3. Select cases/evidence/modules/jobs from the searchable sidebar.
+4. Run modules from the Module Runner drawer (`Run Selected` with per-module progress).
+5. Inspect rows in the center sortable table and analyze details on the right tabs (`Decoded`, `Raw`, `Metadata`).
+6. Export filtered rows to JSON/CSV from the toolbar.
+
+Desktop defaults are saved in `EVIFORGE_DATA_DIR/desktop_profiles.json`.
+
+## Docker Quickstart
+
+```bash
+cp .env.example .env
+# set EVIFORGE_ADMIN_PASSWORD and EVIFORGE_SECRET_KEY
+sudo docker compose up -d --build
+```
+
+If you want strict queue mode in containers, keep:
+```bash
+EVIFORGE_JOB_EXECUTION=queue
+```
+
+## Environment Notes
+
+Common variables:
+- `EVIFORGE_DATA_DIR` (default `./.eviforge`)
+- `EVIFORGE_VAULT_DIR` (default `<data_dir>/vault`)
+- `EVIFORGE_DATABASE_URL`
+- `EVIFORGE_REDIS_URL`
+- `EVIFORGE_JOB_EXECUTION` (`auto|inline|queue`)
+
+## Example API Workflow (Import -> Analyze -> Filter -> Export)
+
+1. Login: `POST /api/auth/token`
+2. Acknowledge authorization: `POST /api/auth/ack`
+3. Create case: `POST /api/cases`
+4. Upload evidence: `POST /api/cases/{case_id}/evidence/upload`
+5. Run module: `POST /api/cases/{case_id}/jobs`
+6. Track job: `GET /api/jobs/{job_id}`
+7. Browse artifacts:
+   - `GET /api/cases/{case_id}/artifacts/tree`
+   - `GET /api/cases/{case_id}/artifacts/file?path=...`
+8. Export by downloading artifact files (`/api/artifacts/{case_id}/{path}`) or via desktop export.
+
+## Changelog (Current Pass)
+
+- Added desktop app and backend service layer.
+- Fixed admin/audit route regression.
+- Added case overview stats API and dashboard wiring.
+- Added robust inline job fallback mode.
+- Added tests:
+  - `tests/test_web_admin.py`
+  - `tests/test_cases_stats.py`
+  - `tests/test_jobs_inline_execution.py`
+  - `tests/test_desktop_backend.py`
+
+## OS Support
+
+- API/web: Linux/macOS/Windows (Python 3.11+).
+- Desktop app: `PySide6` required (`pip install -e ".[desktop]"`).
+- Some modules depend on optional external tools (`tshark`, `exiftool`, `yara`, `bulk_extractor`, `foremost`).
+
+## Runtime Notes
+
+- Stop `eviforge api` with `Ctrl+C` (SIGINT) for normal shutdown.
+- A `core dumped` message often indicates `SIGQUIT` (`Ctrl+\`) or shell job-control signal, not necessarily an application bug.

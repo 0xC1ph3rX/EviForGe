@@ -29,7 +29,11 @@
                 <h3>Evidence Items</h3>
                 <div class="flex" style="flex-wrap: wrap; justify-content: flex-end;">
                     <div class="flex" style="gap:0.5rem;">
+                        <select id="importFileSelect" title="Files available in /import">
+                            <option value="" selected>Loading import files...</option>
+                        </select>
                         <input type="text" id="importFilename" placeholder="File in /import (e.g. disk.img)">
+                        <button onclick="loadImportFiles()" class="btn btn-outline" type="button">Refresh</button>
                         <button onclick="ingestEvidence()" class="btn btn-primary">Ingest</button>
                     </div>
                     <form id="uploadForm" class="flex" style="gap:0.5rem;" onsubmit="uploadEvidence(event)">
@@ -64,49 +68,75 @@
         <div class="card">
             <div class="flex between mb-4">
                 <h3>Forensic Modules</h3>
-                <div class="flex">
+                <div class="flex" style="flex-wrap:wrap;">
                     <select id="moduleSelect">
-                        <option value="" disabled selected>Select Module...</option>
-                        <option value="inventory">Inventory (List Files)</option>
-                        <option value="strings">Strings Extraction</option>
-                        <option value="timeline">Timeline (MACE)</option>
-                        <option value="parse_text">Parse Text (Tika)</option>
-                        <option value="exif">Exif Metadata</option>
-                        <option value="triage">Triage (Entropy/Type)</option>
-                        <option value="verify">Verify (Re-hash)</option>
-                        <option value="report">Report (Case HTML)</option>
-                        <option value="pcap">PCAP (tshark)</option>
-                        <option value="browser">Browser SQLite</option>
-                        <option value="email">Email (EML/MBOX)</option>
-                        <option value="evtx">EVTX (Windows Logs)</option>
-                        <option value="registry">Registry (Hives)</option>
-                        <option value="yara">YARA Scan</option>
-                        <option value="bulk">Bulk Extractor</option>
-                        <option value="carve">Carve (foremost)</option>
+                        <option value="" selected>Loading modules...</option>
                     </select>
                     <select id="targetEvidenceId" title="Evidence item">
                         <option value="" selected>No evidence loaded</option>
                     </select>
                     <input type="text" id="jobParams" placeholder='Params JSON (optional)' style="min-width:220px;">
-                    <button onclick="runJob()" class="btn btn-primary">Run Module</button>
+                    <button id="runJobBtn" onclick="runJob()" class="btn btn-primary" type="button">Run Module</button>
+                    <button id="refreshModulesBtn" onclick="loadModuleCatalog()" class="btn btn-outline" type="button">Refresh Modules</button>
                 </div>
             </div>
 
-            <table id="jobsTable">
-                <thead>
-                    <tr>
-                        <th>Module</th>
-                        <th>Status</th>
-                        <th>Created At</th>
-                        <th>Results / Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td colspan="4" class="text-muted text-center">Loading jobs...</td>
-                    </tr>
-                </tbody>
-            </table>
+            <div id="jobRunStatus" class="text-muted text-sm">Loading module catalog...</div>
+            <div id="moduleHelp" class="text-muted text-sm mt-1">Select a module to view requirements.</div>
+
+            <div class="admin-metrics-grid mt-2">
+                <div class="metric-tile">
+                    <div class="text-xs text-muted uppercase">Total Jobs</div>
+                    <div id="caseJobsTotal" class="text-xl font-bold mt-1">0</div>
+                </div>
+                <div class="metric-tile">
+                    <div class="text-xs text-muted uppercase">Running/Pending</div>
+                    <div id="caseJobsRunning" class="text-xl font-bold mt-1">0</div>
+                </div>
+                <div class="metric-tile">
+                    <div class="text-xs text-muted uppercase">Completed</div>
+                    <div id="caseJobsCompleted" class="text-xl font-bold mt-1">0</div>
+                </div>
+                <div class="metric-tile">
+                    <div class="text-xs text-muted uppercase">Failed</div>
+                    <div id="caseJobsFailed" class="text-xl font-bold mt-1">0</div>
+                </div>
+            </div>
+
+            <div class="ops-chart-card mt-2">
+                <h4>Job Status Graph</h4>
+                <div id="caseJobStatusGraph" class="metric-bar-list mt-2"></div>
+            </div>
+
+            <div class="admin-filters mt-2">
+                <input id="jobSearch" type="search" placeholder="Filter jobs by module or error...">
+                <select id="jobStatusFilter">
+                    <option value="all" selected>All Statuses</option>
+                    <option value="PENDING">Pending</option>
+                    <option value="RUNNING">Running</option>
+                    <option value="COMPLETED">Completed</option>
+                    <option value="FAILED">Failed</option>
+                </select>
+                <span class="badge badge-info">Visible: <span id="caseJobsVisible">0</span></span>
+            </div>
+
+            <div class="table-shell mt-2" style="max-height:420px;">
+                <table id="jobsTable">
+                    <thead>
+                        <tr>
+                            <th>Module</th>
+                            <th>Status</th>
+                            <th>Created At</th>
+                            <th>Results / Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td colspan="4" class="text-muted text-center">Loading jobs...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
 
@@ -192,10 +222,9 @@
     const CASE_ID = "{{ case_id }}";
     let EVIDENCE_ITEMS = [];
     let CURRENT_ARTIFACTS_PATH = "";
-    const MODULE_REQUIRES_EVIDENCE = new Set([
-        "inventory", "strings", "timeline", "parse_text", "exif", "triage", "verify",
-        "pcap", "browser", "email", "evtx", "registry", "yara", "bulk", "carve",
-    ]);
+    const MODULE_REQUIREMENTS = new Map();
+    let MODULE_CATALOG = [];
+    let CASE_JOBS = [];
 
     function escapeHtml(s) {
         return String(s).replace(/[&<>"']/g, (c) => ({
@@ -205,6 +234,187 @@
             '"': '&quot;',
             "'": '&#39;'
         }[c]));
+    }
+
+    function setJobRunStatus(msg, isError = false) {
+        const el = document.getElementById('jobRunStatus');
+        if (!el) return;
+        el.textContent = msg || '';
+        el.className = isError ? 'text-danger text-sm' : 'text-muted text-sm';
+    }
+
+    async function responseErrorText(res) {
+        try {
+            const data = await res.json();
+            if (typeof data?.detail === 'string') return data.detail;
+            if (data?.detail) return JSON.stringify(data.detail);
+            return JSON.stringify(data);
+        } catch (_) {
+            try { return await res.text(); } catch (_) { return 'Unknown error'; }
+        }
+    }
+
+    function moduleRequiresEvidence(moduleName) {
+        return MODULE_REQUIREMENTS.has(moduleName)
+            ? !!MODULE_REQUIREMENTS.get(moduleName)
+            : true;
+    }
+
+    function updateJobMetrics(items) {
+        const rows = items || [];
+        const total = rows.length;
+        const running = rows.filter((j) => j.status === 'RUNNING' || j.status === 'PENDING').length;
+        const completed = rows.filter((j) => j.status === 'COMPLETED').length;
+        const failed = rows.filter((j) => j.status === 'FAILED').length;
+
+        const setText = (id, value) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = String(value);
+        };
+        setText('caseJobsTotal', total);
+        setText('caseJobsRunning', running);
+        setText('caseJobsCompleted', completed);
+        setText('caseJobsFailed', failed);
+
+        renderMetricBars('caseJobStatusGraph', [
+            { label: 'Pending', count: rows.filter((j) => j.status === 'PENDING').length, tone: 'metric-bar-warning' },
+            { label: 'Running', count: rows.filter((j) => j.status === 'RUNNING').length, tone: 'metric-bar-info' },
+            { label: 'Completed', count: completed, tone: 'metric-bar-success' },
+            { label: 'Failed', count: failed, tone: 'metric-bar-danger' },
+        ], 'No jobs to chart yet.');
+    }
+
+    function renderMetricBars(containerId, rows, emptyText) {
+        const el = document.getElementById(containerId);
+        if (!el) return;
+        if (!rows || !rows.length) {
+            el.innerHTML = `<div class="text-muted text-sm">${escapeHtml(emptyText || 'No data')}</div>`;
+            return;
+        }
+        const max = Math.max(...rows.map((r) => Number(r.count) || 0), 1);
+        el.innerHTML = rows.map((row) => {
+            const count = Number(row.count) || 0;
+            const width = count <= 0 ? 4 : Math.max(8, Math.round((count / max) * 100));
+            return `<div class="metric-bar-row">
+                <span class="text-sm text-muted">${escapeHtml(row.label)}</span>
+                <div class="metric-bar-track"><div class="metric-bar-fill ${escapeHtml(row.tone || '')}" style="width:${width}%"></div></div>
+                <span class="text-mono text-sm">${count}</span>
+            </div>`;
+        }).join('');
+    }
+
+    function jobMatchesFilter(job) {
+        const q = (document.getElementById('jobSearch')?.value || '').trim().toLowerCase();
+        const status = (document.getElementById('jobStatusFilter')?.value || 'all');
+        if (status !== 'all' && String(job.status) !== status) return false;
+        if (!q) return true;
+        const text = [job.module, job.status, job.error].map((v) => String(v || '').toLowerCase()).join(' ');
+        return text.includes(q);
+    }
+
+    function renderJobsTable(items) {
+        const tbody = document.querySelector('#jobsTable tbody');
+        if (!tbody) return;
+        const filtered = (items || []).filter(jobMatchesFilter);
+        const visibleEl = document.getElementById('caseJobsVisible');
+        if (visibleEl) visibleEl.textContent = String(filtered.length);
+
+        if (!filtered.length) {
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">No jobs match the current filter.</td></tr>';
+            return;
+        }
+
+        function artifactUrl(p) {
+            const parts = String(p).split('/').map(encodeURIComponent).join('/');
+            return `/api/artifacts/${CASE_ID}/${parts}`;
+        }
+
+        tbody.innerHTML = filtered.map(job => {
+            let statusBadge = `<span class="badge badge-info">${escapeHtml(job.status)}</span>`;
+            if (job.status === 'COMPLETED') statusBadge = `<span class="badge badge-success">Completed</span>`;
+            if (job.status === 'FAILED') statusBadge = `<span class="badge badge-danger">Failed</span>`;
+            if (job.status === 'RUNNING') statusBadge = `<span class="badge badge-warning">Running</span>`;
+
+            let actions = '<span class="text-muted text-sm">-</span>';
+            if (job.output_files && job.output_files.length > 0) {
+                actions = job.output_files.map(p => `<a href="${artifactUrl(p)}" target="_blank" class="text-sm">Download</a>`).join('<br>');
+            } else if (job.status === 'FAILED') {
+                actions = `<span class="text-danger text-sm" title="${escapeHtml(job.error || 'Unknown Error')}">Failed</span>`;
+            }
+            actions = `<a class="text-sm" href="/web/jobs/${job.id}">View Job</a><br>` + actions;
+
+            return `
+                <tr>
+                    <td style="font-weight:500;">${escapeHtml(job.module)}</td>
+                    <td>${statusBadge}</td>
+                    <td class="text-sm text-muted">${new Date(job.created_at).toLocaleString()}</td>
+                    <td>${actions}</td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    function renderModuleCatalog(modules) {
+        const select = document.getElementById('moduleSelect');
+        if (!select) return;
+        const current = select.value || '';
+        if (!modules.length) {
+            select.innerHTML = '<option value="" selected>No modules available</option>';
+            MODULE_REQUIREMENTS.clear();
+            setJobRunStatus('No modules available in current runtime.', true);
+            return;
+        }
+        MODULE_REQUIREMENTS.clear();
+        select.innerHTML = ['<option value="" selected>Select Module...</option>']
+            .concat(modules.map((m) => {
+                const name = String(m.name || '');
+                const desc = String(m.description || '');
+                const req = !!m.requires_evidence;
+                const avail = !!m.available;
+                MODULE_REQUIREMENTS.set(name, req);
+                const evidenceLabel = req ? 'evidence' : 'case';
+                const prefix = avail ? '' : '[unavailable] ';
+                return `<option value="${escapeHtml(name)}" ${avail ? '' : 'disabled'}>${escapeHtml(prefix + name + ' - ' + evidenceLabel + ' - ' + desc.slice(0, 48))}</option>`;
+            }))
+            .join('');
+        if (current && modules.some((m) => m.name === current && m.available)) {
+            select.value = current;
+        }
+        onModuleSelectionChanged();
+        setJobRunStatus(`Loaded ${modules.filter((m) => m.available).length}/${modules.length} modules.`);
+    }
+
+    function onModuleSelectionChanged() {
+        const module = document.getElementById('moduleSelect')?.value || '';
+        const evSel = document.getElementById('targetEvidenceId');
+        const help = document.getElementById('moduleHelp');
+        if (evSel) evSel.disabled = !module || !moduleRequiresEvidence(module);
+        const meta = MODULE_CATALOG.find((m) => String(m.name) === module);
+        if (!help) return;
+        if (!module) {
+            help.textContent = 'Select a module to view requirements.';
+            help.className = 'text-muted text-sm mt-1';
+            return;
+        }
+        const reqText = moduleRequiresEvidence(module) ? 'Requires evidence selection.' : 'Runs on case scope.';
+        const availText = meta && !meta.available ? 'Module unavailable in this runtime.' : 'Module available.';
+        const desc = String(meta?.description || '');
+        help.textContent = `${reqText} ${availText} ${desc}`;
+        help.className = (meta && !meta.available) ? 'text-danger text-sm mt-1' : 'text-muted text-sm mt-1';
+    }
+
+    async function loadModuleCatalog() {
+        const select = document.getElementById('moduleSelect');
+        if (select) select.innerHTML = '<option value="" selected>Loading modules...</option>';
+        setJobRunStatus('Loading module catalog...');
+        const res = await apiFetch('/api/modules/catalog');
+        if (!res.ok) {
+            setJobRunStatus(`Failed to load module catalog (${res.status})`, true);
+            return;
+        }
+        const data = await res.json();
+        MODULE_CATALOG = data.modules || [];
+        renderModuleCatalog(MODULE_CATALOG);
     }
 
     // Tab Logic
@@ -235,7 +445,9 @@
                 document.getElementById('caseTitleDisplay').innerText = c.name;
                 // document.title = `Case ${c.name} - EviForge`;
             }
+            loadImportFiles();
             loadEvidence();
+            loadModuleCatalog();
             loadJobs();
         } catch (e) { console.error(e); }
     }
@@ -270,14 +482,44 @@
         `).join('');
     }
 
+    async function loadImportFiles() {
+        const sel = document.getElementById('importFileSelect');
+        if (!sel) return;
+        sel.innerHTML = '<option value="" selected>Loading import files...</option>';
+
+        const res = await apiFetch(`/api/cases/${CASE_ID}/import-files`);
+        if (!res.ok) {
+            sel.innerHTML = '<option value="" selected>Failed to load import files</option>';
+            return;
+        }
+        const data = await res.json();
+        const files = data.files || [];
+        if (files.length === 0) {
+            sel.innerHTML = '<option value="" selected>No files in import directory</option>';
+            return;
+        }
+        sel.innerHTML = ['<option value="" selected>Select file from import…</option>']
+            .concat(files.map(f => `<option value="${escapeHtml(f.name)}">${escapeHtml(f.name)} (${(f.size / 1024).toFixed(1)} KB)</option>`))
+            .join('');
+    }
+
     async function ingestEvidence() {
-        const filename = document.getElementById('importFilename').value;
+        const selected = document.getElementById('importFileSelect')?.value || '';
+        const typed = document.getElementById('importFilename').value.trim();
+        const filename = typed || selected;
         if (!filename) return alert("Enter a filename");
         const res = await apiFetch(`/api/cases/${CASE_ID}/evidence`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ filename })
         });
-        if (res.ok) { document.getElementById('importFilename').value = ''; loadEvidence(); }
+        if (res.ok) {
+            document.getElementById('importFilename').value = '';
+            if (document.getElementById('importFileSelect')) {
+                document.getElementById('importFileSelect').value = '';
+            }
+            loadImportFiles();
+            loadEvidence();
+        }
         else alert('Ingest failed');
     }
 
@@ -302,79 +544,76 @@
         sel.innerHTML = ['<option value="" selected>Select evidence…</option>'].concat(
             items.map(ev => `<option value="${ev.id}">${ev.filename} (${ev.id.substring(0, 8)})</option>`)
         ).join('');
+        onModuleSelectionChanged();
     }
 
     // --- JOBS ---
     async function loadJobs() {
         const res = await apiFetch(`/api/cases/${CASE_ID}/jobs`);
-        const tbody = document.querySelector('#jobsTable tbody');
-        if (!res.ok) return;
-
-        const items = await res.json();
-        if (items.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">No jobs run yet.</td></tr>';
+        if (!res.ok) {
+            setJobRunStatus(`Failed to load jobs (${res.status})`, true);
             return;
         }
 
-        function artifactUrl(p) {
-            const parts = String(p).split('/').map(encodeURIComponent).join('/');
-            return `/api/artifacts/${CASE_ID}/${parts}`;
-        }
-
-        tbody.innerHTML = items.map(job => {
-            let statusBadge = `<span class="badge badge-info">${job.status}</span>`;
-            if (job.status === 'COMPLETED') statusBadge = `<span class="badge badge-success">Completed</span>`;
-            if (job.status === 'FAILED') statusBadge = `<span class="badge badge-danger">Failed</span>`;
-            if (job.status === 'RUNNING') statusBadge = `<span class="badge badge-warning">Running</span>`;
-
-            let actions = '<span class="text-muted text-sm">-</span>';
-            if (job.output_files && job.output_files.length > 0) {
-                actions = job.output_files.map(p =>
-                    `<a href="${artifactUrl(p)}" target="_blank" class="text-sm">Download</a>`
-                ).join('<br>');
-            } else if (job.status === 'FAILED') {
-                actions = `<span class="text-danger text-sm" title="${escapeHtml(job.error || 'Unknown Error')}">Failed</span>`;
-            }
-
-            actions = `<a class="text-sm" href="/web/jobs/${job.id}">View Job</a><br>` + actions;
-
-            return `
-                <tr>
-                    <td style="font-weight:500;">${job.module}</td>
-                    <td>${statusBadge}</td>
-                    <td class="text-sm text-muted">${new Date(job.created_at).toLocaleString()}</td>
-                    <td>${actions}</td>
-                </tr>
-            `;
-        }).join('');
+        CASE_JOBS = await res.json();
+        updateJobMetrics(CASE_JOBS);
+        renderJobsTable(CASE_JOBS);
+        setJobRunStatus(`Loaded ${CASE_JOBS.length} jobs.`);
     }
 
     async function runJob() {
         const module = document.getElementById('moduleSelect').value;
         const evidenceId = document.getElementById('targetEvidenceId').value;
         const paramsRaw = (document.getElementById('jobParams')?.value || '').trim();
-        if (!module) return alert('Select module');
-        if (MODULE_REQUIRES_EVIDENCE.has(module) && !evidenceId) return alert('Select evidence (required for this module)');
+        const runBtn = document.getElementById('runJobBtn');
+        if (!module) {
+            setJobRunStatus('Select a module first.', true);
+            return;
+        }
+        if (moduleRequiresEvidence(module) && !evidenceId) {
+            setJobRunStatus('Selected module requires evidence. Choose evidence first.', true);
+            return;
+        }
 
         let params = {};
         if (paramsRaw) {
             try { params = JSON.parse(paramsRaw); }
-            catch { return alert('Params JSON is invalid'); }
+            catch {
+                setJobRunStatus('Params JSON is invalid.', true);
+                return;
+            }
         }
+
+        if (runBtn) runBtn.disabled = true;
+        setJobRunStatus(`Submitting module ${module}...`);
 
         const res = await apiFetch(`/api/cases/${CASE_ID}/jobs`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ module, evidence_id: evidenceId || null, params })
         });
-        if (res.ok) { loadJobs(); switchTab('jobs'); } // Auto switch to jobs to see progress
-        else alert('Run failed');
+        if (runBtn) runBtn.disabled = false;
+        if (res.ok) {
+            const data = await res.json();
+            setJobRunStatus(`Module ${module} queued as job ${String(data.id || '').substring(0, 8)}.`);
+            loadJobs();
+            switchTab('jobs');
+        } else {
+            setJobRunStatus(`Run failed (${res.status}): ${await responseErrorText(res)}`, true);
+        }
     }
 
     document.getElementById('moduleSelect')?.addEventListener('change', () => {
-        const module = document.getElementById('moduleSelect').value;
-        const evSel = document.getElementById('targetEvidenceId');
-        if (!evSel) return;
-        evSel.disabled = !MODULE_REQUIRES_EVIDENCE.has(module);
+        onModuleSelectionChanged();
+    });
+
+    document.getElementById('jobSearch')?.addEventListener('input', () => renderJobsTable(CASE_JOBS));
+    document.getElementById('jobStatusFilter')?.addEventListener('change', () => renderJobsTable(CASE_JOBS));
+
+    document.getElementById('importFileSelect')?.addEventListener('change', () => {
+        const sel = document.getElementById('importFileSelect');
+        const input = document.getElementById('importFilename');
+        if (!sel || !input) return;
+        if (sel.value) input.value = sel.value;
     });
 
     // --- ARTIFACTS ---

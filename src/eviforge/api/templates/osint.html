@@ -3,19 +3,600 @@
 {% block title %}OSINT & Privacy - EviForge{% endblock %}
 
 {% block content %}
-<div class="card">
-  <h2>OSINT &amp; Privacy Resources</h2>
-  <p class="text-muted">This page provides lawful privacy and removal resources. It does not perform scraping, collection, or automated lookups.</p>
+<div class="osint-shell">
+  <div class="card osint-hero">
+    <div>
+      <h2>OSINT &amp; Privacy</h2>
+      <p class="text-muted mt-1">
+        Lawful privacy/removal resources and auditable case-linked action tracking. No scraping, covert monitoring, or offensive activity.
+      </p>
+    </div>
+    <div class="osint-chip-row">
+      <span class="badge badge-info">Defensive Use</span>
+      <span class="badge badge-success">Case Auditable</span>
+      <span class="badge badge-warning">Manual Operator Control</span>
+    </div>
+  </div>
 
-  <h3 class="mt-2">Photo Removal</h3>
-  <ul style="padding-left:1rem;">
-    <li><a href="https://facecheck.id/removemyphotos" target="_blank" rel="noreferrer">FaceCheck — Remove My Photos</a></li>
-  </ul>
+  <div class="osint-metrics-grid">
+    <div class="metric-tile">
+      <div class="text-xs text-muted uppercase">Cases Loaded</div>
+      <div id="metricCaseCount" class="text-xl font-bold mt-1">0</div>
+    </div>
+    <div class="metric-tile">
+      <div class="text-xs text-muted uppercase">Actions</div>
+      <div id="metricActionCount" class="text-xl font-bold mt-1">0</div>
+    </div>
+    <div class="metric-tile">
+      <div class="text-xs text-muted uppercase">In Progress</div>
+      <div id="metricPendingCount" class="text-xl font-bold mt-1">0</div>
+    </div>
+    <div class="metric-tile">
+      <div class="text-xs text-muted uppercase">Completed</div>
+      <div id="metricCompletedCount" class="text-xl font-bold mt-1">0</div>
+    </div>
+  </div>
 
-  <h3 class="mt-2">General Privacy</h3>
-  <ul style="padding-left:1rem;">
-    <li><a href="https://www.consumer.ftc.gov/" target="_blank" rel="noreferrer">FTC Consumer Advice</a></li>
-    <li><a href="https://haveibeenpwned.com/" target="_blank" rel="noreferrer">Have I Been Pwned</a></li>
-  </ul>
+  <div class="osint-analytics-grid">
+    <div class="card" style="margin-bottom:0;">
+      <div class="flex between">
+        <h3>Status Graph</h3>
+        <span class="text-xs text-muted">Selected case</span>
+      </div>
+      <div id="osintStatusGraph" class="metric-bar-list mt-2"></div>
+    </div>
+    <div class="card" style="margin-bottom:0;">
+      <div class="flex between">
+        <h3>Provider Graph</h3>
+        <span class="text-xs text-muted">Top providers</span>
+      </div>
+      <div id="osintProviderGraph" class="metric-bar-list mt-2"></div>
+    </div>
+  </div>
+
+  <div class="osint-layout">
+    <aside class="card osint-resources">
+      <h3>External Resources</h3>
+      <div class="text-muted text-sm mt-1">Use external portals directly and track each step in the action log.</div>
+
+      <h4 class="mt-2">Photo Removal</h4>
+      <ul class="osint-links">
+        <li>
+          <a href="https://facecheck.id/removemyphotos" target="_blank" rel="noreferrer">
+            FaceCheck - Remove My Photos
+          </a>
+        </li>
+      </ul>
+
+      <h4 class="mt-2">General Privacy</h4>
+      <ul class="osint-links">
+        <li>
+          <a href="https://www.consumer.ftc.gov/" target="_blank" rel="noreferrer">
+            FTC Consumer Advice
+          </a>
+        </li>
+        <li>
+          <a href="https://haveibeenpwned.com/" target="_blank" rel="noreferrer">
+            Have I Been Pwned
+          </a>
+        </li>
+      </ul>
+
+      <div class="osint-note mt-2">
+        Tip: create the action record before external submission so timestamps, status changes, and attachments stay in chain-of-custody.
+      </div>
+
+      <div class="osint-local-tools mt-2">
+        <div class="flex between" style="align-items:center;">
+          <h4 style="margin:0;">Local OSINT Toolkit</h4>
+          <button class="btn btn-sm btn-outline" type="button" id="refreshOsintToolsBtn">Refresh</button>
+        </div>
+        <div class="text-muted text-sm mt-1">Runtime availability of local OSINT/privacy helper tools.</div>
+
+        <div class="osint-tool-metrics mt-2">
+          <div class="metric-tile">
+            <div class="text-xs text-muted uppercase">Tools Enabled</div>
+            <div id="metricOsintToolEnabled" class="text-lg font-bold mt-1">0</div>
+          </div>
+          <div class="metric-tile">
+            <div class="text-xs text-muted uppercase">Tools Total</div>
+            <div id="metricOsintToolTotal" class="text-lg font-bold mt-1">0</div>
+          </div>
+        </div>
+
+        <div id="osintToolGraph" class="metric-bar-list mt-2"></div>
+
+        <div class="mt-2">
+          <input id="osintToolSearch" placeholder="Filter tools by name/category..." style="width:100%; box-sizing:border-box;">
+        </div>
+
+        <div class="table-shell osint-tools-table-shell mt-2">
+          <table class="table w-full">
+            <thead>
+              <tr>
+                <th>Tool</th>
+                <th>Category</th>
+                <th>Status</th>
+                <th>Path</th>
+              </tr>
+            </thead>
+            <tbody id="osintToolsTbody">
+              <tr>
+                <td colspan="4" class="text-muted text-center">Loading tool status...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </aside>
+
+    <section class="card osint-workbench">
+      <div class="osint-toolbar">
+        <div>
+          <h3>Case OSINT Action Tracker</h3>
+          <div class="text-muted text-sm mt-1">Select case, create request, update status, and attach proofs.</div>
+        </div>
+        <button class="btn btn-outline btn-sm" type="button" id="refreshCasesBtn">Refresh Cases</button>
+      </div>
+
+      <div class="osint-case-row mt-2">
+        <label class="text-sm font-bold text-muted" for="osintCaseSelect">Case</label>
+        <select id="osintCaseSelect"></select>
+        <span id="osintStatus" class="text-muted text-sm">Loading cases...</span>
+      </div>
+
+      <div class="card osint-create-card mt-2">
+        <h4>Create Action</h4>
+        <div class="osint-create-grid mt-2">
+          <div>
+            <label class="text-sm font-bold text-muted">Provider</label>
+            <select id="newProvider" style="width:100%;">
+              <option value="facecheck">facecheck</option>
+              <option value="ftc">ftc</option>
+              <option value="hibp">hibp</option>
+              <option value="custom">custom</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-sm font-bold text-muted">Action Type</label>
+            <select id="newActionType" style="width:100%;">
+              <option value="remove_my_photos">remove_my_photos</option>
+              <option value="privacy_request">privacy_request</option>
+              <option value="breach_check">breach_check</option>
+              <option value="other">other</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-sm font-bold text-muted">Target Label</label>
+            <input id="newTargetLabel" placeholder="email, profile, account id..." style="width:100%; box-sizing:border-box;">
+          </div>
+          <div>
+            <label class="text-sm font-bold text-muted">Notes</label>
+            <input id="newNotes" placeholder="initial request details" style="width:100%; box-sizing:border-box;">
+          </div>
+        </div>
+        <div class="mt-2 flex" style="justify-content:flex-end;">
+          <button class="btn btn-primary" type="button" id="createActionBtn">Create Action</button>
+        </div>
+      </div>
+
+      <div class="osint-filter-row mt-2">
+        <input id="actionSearchInput" type="search" placeholder="Filter by provider, target, status, URL, notes...">
+        <select id="actionStatusFilter">
+          <option value="all" selected>All Statuses</option>
+          <option value="draft">Draft</option>
+          <option value="submitted">Submitted</option>
+          <option value="in_review">In Review</option>
+          <option value="completed">Completed</option>
+          <option value="failed">Failed</option>
+        </select>
+      </div>
+
+      <div class="table-shell mt-2">
+        <table class="table w-full">
+          <thead>
+            <tr>
+              <th>Provider</th>
+              <th>Type</th>
+              <th>Target</th>
+              <th>Status</th>
+              <th>Tracking URL</th>
+              <th>Notes</th>
+              <th>Attachment</th>
+              <th>Save</th>
+            </tr>
+          </thead>
+          <tbody id="actionsTbody">
+            <tr>
+              <td colspan="8" class="text-muted text-center">Select a case to load actions.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const statusEl = document.getElementById('osintStatus');
+  const caseSelectEl = document.getElementById('osintCaseSelect');
+  const actionsTbodyEl = document.getElementById('actionsTbody');
+  const actionSearchInputEl = document.getElementById('actionSearchInput');
+  const actionStatusFilterEl = document.getElementById('actionStatusFilter');
+  const osintToolSearchEl = document.getElementById('osintToolSearch');
+  const osintToolsTbodyEl = document.getElementById('osintToolsTbody');
+
+  const ACTION_STATUSES = ['draft', 'submitted', 'in_review', 'completed', 'failed'];
+  let casesCache = [];
+  let actionsCache = [];
+  let osintToolsCache = [];
+
+  function esc(s) {
+    return String(s ?? '').replace(/[&<>"']/g, (c) => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;'
+    }[c]));
+  }
+
+  function selectedCaseId() {
+    return caseSelectEl.value || '';
+  }
+
+  function setStatus(msg, isError = false) {
+    statusEl.textContent = msg || '';
+    statusEl.className = isError ? 'text-danger text-sm' : 'text-muted text-sm';
+  }
+
+  function setMetric(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = String(value);
+  }
+
+  function updateMetrics() {
+    const inProgressStates = new Set(['draft', 'submitted', 'in_review']);
+    const pending = actionsCache.filter((a) => inProgressStates.has(String(a.status || '').toLowerCase())).length;
+    const completed = actionsCache.filter((a) => String(a.status || '').toLowerCase() === 'completed').length;
+    setMetric('metricCaseCount', casesCache.length);
+    setMetric('metricActionCount', actionsCache.length);
+    setMetric('metricPendingCount', pending);
+    setMetric('metricCompletedCount', completed);
+    updateActionGraphs();
+  }
+
+  function renderGraphBars(containerId, rows, emptyText) {
+    const el = document.getElementById(containerId);
+    if (!el) return;
+    if (!rows || !rows.length) {
+      el.innerHTML = `<div class="text-muted text-sm">${esc(emptyText || 'No data')}</div>`;
+      return;
+    }
+    const max = Math.max(...rows.map((r) => Number(r.count) || 0), 1);
+    el.innerHTML = rows.map((row) => {
+      const count = Number(row.count) || 0;
+      const width = count <= 0 ? 4 : Math.max(8, Math.round((count / max) * 100));
+      return `<div class="metric-bar-row">
+        <span class="text-sm text-muted">${esc(row.label)}</span>
+        <div class="metric-bar-track">
+          <div class="metric-bar-fill ${esc(row.tone || '')}" style="width:${width}%"></div>
+        </div>
+        <span class="text-mono text-sm">${count}</span>
+      </div>`;
+    }).join('');
+  }
+
+  function updateActionGraphs() {
+    const statusMap = new Map(ACTION_STATUSES.map((s) => [s, 0]));
+    for (const action of actionsCache || []) {
+      const k = String(action.status || '').toLowerCase();
+      statusMap.set(k, (statusMap.get(k) || 0) + 1);
+    }
+    const statusRows = ACTION_STATUSES.map((s) => ({
+      label: s.replace('_', ' '),
+      count: statusMap.get(s) || 0,
+      tone: s === 'completed' ? 'metric-bar-success'
+        : s === 'failed' ? 'metric-bar-danger'
+        : s === 'in_review' ? 'metric-bar-info'
+        : 'metric-bar-warning',
+    }));
+    renderGraphBars('osintStatusGraph', statusRows, 'No actions to chart.');
+
+    const providerMap = new Map();
+    for (const action of actionsCache || []) {
+      const provider = String(action.provider || 'unknown');
+      providerMap.set(provider, (providerMap.get(provider) || 0) + 1);
+    }
+    const providerRows = Array.from(providerMap.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 6)
+      .map(([provider, count]) => ({ label: provider, count, tone: 'metric-bar-info' }));
+    renderGraphBars('osintProviderGraph', providerRows, 'No provider data yet.');
+  }
+
+  function actionMatchesFilter(a) {
+    const q = (actionSearchInputEl?.value || '').trim().toLowerCase();
+    const status = (actionStatusFilterEl?.value || 'all').trim().toLowerCase();
+    const itemStatus = String(a.status || '').toLowerCase();
+    if (status !== 'all' && itemStatus !== status) return false;
+    if (!q) return true;
+    const text = [
+      a.provider,
+      a.action_type,
+      a.target_label,
+      a.status,
+      a.tracking_url,
+      a.notes,
+    ].map((v) => String(v || '').toLowerCase()).join(' ');
+    return text.includes(q);
+  }
+
+  function updateOsintToolMetrics() {
+    const total = osintToolsCache.length;
+    const enabled = osintToolsCache.filter((t) => !!t.enabled).length;
+    setMetric('metricOsintToolTotal', total);
+    setMetric('metricOsintToolEnabled', enabled);
+
+    const categoryMap = new Map();
+    for (const tool of osintToolsCache) {
+      const cat = String(tool.category || 'general');
+      categoryMap.set(cat, (categoryMap.get(cat) || 0) + 1);
+    }
+    const rows = Array.from(categoryMap.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([category, count]) => ({ label: category, count, tone: 'metric-bar-info' }));
+    renderGraphBars('osintToolGraph', rows, 'No local tool data yet.');
+  }
+
+  function osintToolMatchesFilter(tool) {
+    const q = (osintToolSearchEl?.value || '').trim().toLowerCase();
+    if (!q) return true;
+    const text = [tool.name, tool.category, tool.path, tool.version]
+      .map((v) => String(v || '').toLowerCase())
+      .join(' ');
+    return text.includes(q);
+  }
+
+  function renderOsintTools() {
+    if (!osintToolsTbodyEl) return;
+    const rows = (osintToolsCache || []).filter(osintToolMatchesFilter);
+    if (!rows.length) {
+      osintToolsTbodyEl.innerHTML = '<tr><td colspan="4" class="text-muted text-center">No tools match the current filter.</td></tr>';
+      return;
+    }
+
+    osintToolsTbodyEl.innerHTML = rows.map((tool) => {
+      const statusBadge = tool.enabled
+        ? '<span class="badge badge-success">Enabled</span>'
+        : '<span class="badge badge-danger">Missing</span>';
+      return `<tr>
+        <td class="text-mono text-sm">${esc(tool.name)}</td>
+        <td class="text-sm">${esc(tool.category || 'general')}</td>
+        <td>${statusBadge}</td>
+        <td class="text-mono text-xs">${esc(tool.path || '-')}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  async function loadOsintTools() {
+    const res = await apiFetch('/web/osint/tools-data');
+    if (!res.ok) {
+      if (osintToolsTbodyEl) {
+        osintToolsTbodyEl.innerHTML = `<tr><td colspan="4" class="text-muted text-center">Failed to load tool status (${res.status}).</td></tr>`;
+      }
+      setMetric('metricOsintToolTotal', 0);
+      setMetric('metricOsintToolEnabled', 0);
+      renderGraphBars('osintToolGraph', [], 'Failed to load tool data.');
+      return;
+    }
+
+    const data = await res.json();
+    osintToolsCache = data.tools || [];
+    updateOsintToolMetrics();
+    renderOsintTools();
+  }
+
+  function renderActions() {
+    const rowsData = (actionsCache || []).filter(actionMatchesFilter);
+    if (!rowsData.length) {
+      actionsTbodyEl.innerHTML = '<tr><td colspan="8" class="text-muted text-center">No actions match the current filter.</td></tr>';
+      return;
+    }
+
+    const rows = rowsData.map((a) => {
+      const statusOptions = ACTION_STATUSES
+        .map((s) => `<option value="${s}" ${a.status === s ? 'selected' : ''}>${s}</option>`)
+        .join('');
+
+      return `<tr data-action-id="${esc(a.id)}">
+        <td class="text-mono text-sm">${esc(a.provider)}</td>
+        <td class="text-mono text-sm">${esc(a.action_type)}</td>
+        <td><input class="target-input" value="${esc(a.target_label || '')}" placeholder="target"></td>
+        <td><select class="status-select">${statusOptions}</select></td>
+        <td><input class="tracking-input" value="${esc(a.tracking_url || '')}" placeholder="https://ticket.example"></td>
+        <td><input class="notes-input" value="${esc(a.notes || '')}" placeholder="notes"></td>
+        <td>
+          <input class="attach-input" type="file" style="max-width:220px;">
+          <button class="btn btn-outline btn-sm upload-btn" type="button">Upload</button>
+        </td>
+        <td>
+          <button class="btn btn-primary btn-sm save-btn" type="button">Save</button>
+        </td>
+      </tr>`;
+    });
+    actionsTbodyEl.innerHTML = rows.join('');
+    bindRowHandlers();
+  }
+
+  async function loadCases() {
+    const previousCase = selectedCaseId();
+    setStatus('Loading cases...');
+    const res = await apiFetch('/api/cases');
+    if (!res.ok) {
+      setStatus(`Failed to load cases (${res.status})`, true);
+      return;
+    }
+    casesCache = await res.json();
+    caseSelectEl.innerHTML = '';
+    for (const c of casesCache) {
+      const opt = document.createElement('option');
+      opt.value = c.id;
+      opt.textContent = `${c.name} [${String(c.id).slice(0, 8)}]`;
+      caseSelectEl.appendChild(opt);
+    }
+
+    if (!casesCache.length) {
+      actionsCache = [];
+      updateMetrics();
+      actionsTbodyEl.innerHTML = '<tr><td colspan="8" class="text-muted text-center">No cases yet. Create one from Cases dashboard.</td></tr>';
+      setStatus('No cases available.', true);
+      return;
+    }
+
+    const selectedStillExists = casesCache.some((c) => c.id === previousCase);
+    caseSelectEl.value = selectedStillExists ? previousCase : casesCache[0].id;
+    updateMetrics();
+    setStatus(`Loaded ${casesCache.length} cases.`);
+    await loadActions();
+  }
+
+  async function loadActions() {
+    const caseId = selectedCaseId();
+    if (!caseId) {
+      actionsCache = [];
+      updateMetrics();
+      actionsTbodyEl.innerHTML = '<tr><td colspan="8" class="text-muted text-center">Select a case.</td></tr>';
+      return;
+    }
+
+    setStatus('Loading case actions...');
+    const res = await apiFetch(`/api/cases/${encodeURIComponent(caseId)}/osint/actions`);
+    if (!res.ok) {
+      actionsCache = [];
+      updateMetrics();
+      actionsTbodyEl.innerHTML = `<tr><td colspan="8" class="text-danger text-center">Failed to load actions (${res.status})</td></tr>`;
+      setStatus(`Failed to load actions (${res.status})`, true);
+      return;
+    }
+
+    actionsCache = await res.json();
+    updateMetrics();
+    if (!actionsCache.length) {
+      actionsTbodyEl.innerHTML = '<tr><td colspan="8" class="text-muted text-center">No OSINT actions yet for this case.</td></tr>';
+      setStatus('No actions in selected case.');
+      return;
+    }
+    renderActions();
+    setStatus(`Loaded ${actionsCache.length} actions.`);
+  }
+
+  async function createAction() {
+    const caseId = selectedCaseId();
+    if (!caseId) {
+      setStatus('Select a case first.', true);
+      return;
+    }
+    const provider = document.getElementById('newProvider').value.trim();
+    const actionType = document.getElementById('newActionType').value.trim();
+    const targetLabel = document.getElementById('newTargetLabel').value.trim();
+    const notes = document.getElementById('newNotes').value.trim();
+    if (!provider || !actionType) {
+      setStatus('Provider and action type are required.', true);
+      return;
+    }
+
+    setStatus('Creating action...');
+    const res = await apiFetch(`/api/cases/${encodeURIComponent(caseId)}/osint/actions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        provider,
+        action_type: actionType,
+        target_label: targetLabel || null,
+        notes: notes || null,
+      })
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      setStatus(`Create failed (${res.status}): ${text}`, true);
+      return;
+    }
+    document.getElementById('newTargetLabel').value = '';
+    document.getElementById('newNotes').value = '';
+    await loadActions();
+    setStatus('Action created.');
+  }
+
+  async function saveAction(actionId, tr) {
+    const caseId = selectedCaseId();
+    const targetLabel = tr.querySelector('.target-input').value.trim();
+    const status = tr.querySelector('.status-select').value;
+    const trackingUrl = tr.querySelector('.tracking-input').value.trim();
+    const notes = tr.querySelector('.notes-input').value.trim();
+
+    const res = await apiFetch(`/api/cases/${encodeURIComponent(caseId)}/osint/actions/${encodeURIComponent(actionId)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        target_label: targetLabel || null,
+        status,
+        tracking_url: trackingUrl || null,
+        notes: notes || null,
+      })
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      setStatus(`Update failed (${res.status}): ${text}`, true);
+      return;
+    }
+    await loadActions();
+    setStatus(`Action ${String(actionId).slice(0, 8)} updated.`);
+  }
+
+  async function uploadAttachment(actionId, tr) {
+    const caseId = selectedCaseId();
+    const input = tr.querySelector('.attach-input');
+    if (!input.files || !input.files[0]) {
+      setStatus('Choose a file before upload.', true);
+      return;
+    }
+
+    const fd = new FormData();
+    fd.append('file', input.files[0]);
+    const res = await apiFetch(`/api/cases/${encodeURIComponent(caseId)}/osint/actions/${encodeURIComponent(actionId)}/attachments`, {
+      method: 'POST',
+      body: fd
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      setStatus(`Upload failed (${res.status}): ${text}`, true);
+      return;
+    }
+    const data = await res.json();
+    input.value = '';
+    setStatus(`Attachment uploaded: ${data.filename}`);
+  }
+
+  function bindRowHandlers() {
+    actionsTbodyEl.querySelectorAll('tr[data-action-id]').forEach((tr) => {
+      const actionId = tr.getAttribute('data-action-id');
+      tr.querySelector('.save-btn')?.addEventListener('click', () => saveAction(actionId, tr));
+      tr.querySelector('.upload-btn')?.addEventListener('click', () => uploadAttachment(actionId, tr));
+    });
+  }
+
+  caseSelectEl.addEventListener('change', loadActions);
+  document.getElementById('refreshCasesBtn').addEventListener('click', loadCases);
+  document.getElementById('createActionBtn').addEventListener('click', createAction);
+  document.getElementById('refreshOsintToolsBtn')?.addEventListener('click', loadOsintTools);
+  actionSearchInputEl?.addEventListener('input', renderActions);
+  actionStatusFilterEl?.addEventListener('change', renderActions);
+  osintToolSearchEl?.addEventListener('input', renderOsintTools);
+
+  loadCases();
+  loadOsintTools();
+</script>
 {% endblock %}

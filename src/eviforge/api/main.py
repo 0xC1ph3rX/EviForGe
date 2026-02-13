@@ -9,6 +9,9 @@ from eviforge.api.routes.evidence import router as evidence_router
 from eviforge.api.routes.health import router as health_router
 from eviforge.api.routes.jobs import router as jobs_router
 from eviforge.api.routes.iocs import router as iocs_router
+from eviforge.api.routes.osint import router as osint_router
+from eviforge.api.routes.modules import router as modules_router
+from eviforge.api.routes.root import router as root_router
 from eviforge.api.routes.webdev import router as web_router
 
 from eviforge.api.routes.artifacts import router as artifacts_router
@@ -44,6 +47,9 @@ def create_app() -> FastAPI:
         openapi_url="/api/openapi.json",
     )
 
+    # Root routes
+    app.include_router(root_router)
+
     # API
     app.include_router(health_router, prefix="/api")
     app.include_router(auth_router, prefix="/api")
@@ -53,6 +59,8 @@ def create_app() -> FastAPI:
     app.include_router(jobs_router, prefix="/api/jobs", tags=["jobs"])
     app.include_router(artifacts_router, prefix="/api", tags=["artifacts"])
     app.include_router(iocs_router, prefix="/api")
+    app.include_router(osint_router, prefix="/api")
+    app.include_router(modules_router, prefix="/api")
 
     # Web UI
     app.include_router(web_router, prefix="/web", tags=["web"])

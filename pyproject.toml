@@ -31,11 +31,13 @@ dependencies = [
 [project.optional-dependencies]
 html = ["Jinja2>=3.1"]
 postgres = ["psycopg[binary]>=3.2"]
-dev = ["pytest>=8.0", "mkdocs-material>=9.5"]
+dev = ["pytest>=8.0"]
 test = ["pytest>=8.0", "httpx>=0.27"]
+desktop = ["PySide6>=6.7"]
 
 [project.scripts]
 eviforge = "eviforge.cli:main"
+eviforge-desktop = "eviforge.desktop:main"
 dfir = "dfirlab.cli:main"
 
 [tool.setuptools]

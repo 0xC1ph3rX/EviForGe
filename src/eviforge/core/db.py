@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import json
 import uuid
+from pathlib import Path
 
 from sqlalchemy import DateTime, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
@@ -32,6 +33,10 @@ def create_session_factory(database_url: str):
     connect_args = {}
     if database_url.startswith("sqlite:"):
         connect_args = {"check_same_thread": False}
+        if database_url.startswith("sqlite:///"):
+            db_path = database_url[len("sqlite:///") :]
+            if db_path and db_path != ":memory:":
+                Path(db_path).expanduser().resolve().parent.mkdir(parents=True, exist_ok=True)
 
     engine = create_engine(database_url, future=True, connect_args=connect_args)
     Base.metadata.create_all(engine)

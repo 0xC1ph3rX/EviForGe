@@ -70,14 +70,21 @@
 {% block scripts %}
 <script>
     async function loadDashboard() {
+        const statsRes = await apiFetch('/api/cases/stats/overview');
+        if (statsRes.ok) {
+            const stats = await statsRes.json();
+            document.getElementById('statsCases').innerText = stats.cases;
+            document.getElementById('statsJobs').innerText = stats.jobs_running;
+            document.getElementById('statsEvidence').innerText = stats.evidence;
+        } else {
+            document.getElementById('statsCases').innerText = "-";
+            document.getElementById('statsJobs').innerText = "-";
+            document.getElementById('statsEvidence').innerText = "-";
+        }
+
         const res = await apiFetch('/api/cases');
         if (!res.ok) return;
         const cases = await res.json();
-
-        // Update Stats (naive)
-        document.getElementById('statsCases').innerText = cases.length;
-        document.getElementById('statsJobs').innerText = "0"; // Placeholder until jobs API supports global list
-        document.getElementById('statsEvidence').innerText = "-"; // Requires aggregation
 
         // Render Table
         const tbody = document.querySelector('#casesTable tbody');

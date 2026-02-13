@@ -44,7 +44,7 @@
                 </div>
             </main>
 
-            <footer style="text-align:center; padding: 1rem; color: #7f8c8d; font-size: 0.8rem;">
+            <footer class="text-center text-xs text-muted" style="padding: 1rem;">
                 EviForge Community Edition &bull; Local-First DFIR
             </footer>
         </div>
@@ -101,8 +101,8 @@
         }
 
         function initTheme() {
-            const t = localStorage.getItem('eviforge_theme') || 'light';
-            document.body.classList.toggle('dark', t === 'dark');
+            const t = localStorage.getItem('eviforge_theme') || 'dark';
+            document.body.classList.toggle('dark', t !== 'light');
         }
 
         function toggleTheme() {

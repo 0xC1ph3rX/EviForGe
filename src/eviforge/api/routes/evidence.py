@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
@@ -34,6 +35,40 @@ def _safe_leaf_filename(raw: str) -> str:
     if not filename or filename != Path(filename).name or "/" in filename or "\\" in filename:
         raise HTTPException(status_code=400, detail="Invalid filename")
     return filename
+
+
+@router.get("/{case_id}/import-files")
+def list_import_files(case_id: str):
+    """
+    List top-level files available in the import directory for UI selection.
+    """
+    settings = load_settings()
+    SessionLocal = create_session_factory(settings.database_url)
+    with SessionLocal() as session:
+        case = session.get(Case, case_id)
+        if not case:
+            raise HTTPException(status_code=404, detail="Case not found")
+
+    import_root = _get_import_root()
+    if not import_root.exists():
+        return {"root": str(import_root), "files": []}
+
+    files: list[dict] = []
+    for child in sorted(import_root.iterdir(), key=lambda p: p.name.lower()):
+        try:
+            if not child.is_file():
+                continue
+            st = child.stat()
+            files.append(
+                {
+                    "name": child.name,
+                    "size": st.st_size,
+                    "mtime": datetime.fromtimestamp(st.st_mtime, tz=timezone.utc).isoformat(),
+                }
+            )
+        except Exception:
+            continue
+    return {"root": str(import_root), "files": files}
 
 
 def _ingest_from_import(

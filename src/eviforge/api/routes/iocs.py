@@ -1,6 +1,6 @@
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 from datetime import datetime
 
@@ -21,8 +21,7 @@ class IOCResponse(IOCCreate):
     id: str
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 @router.post("/", response_model=IOCResponse)
 def add_ioc(case_id: str, ioc: IOCCreate, _user: User = Depends(require_roles("admin", "analyst"))):

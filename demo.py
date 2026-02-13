@@ -11,8 +11,8 @@ from rq import Queue, Worker
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from eviforge.config import Settings
-from eviforge.core.db import create_session_factory, Case
-from eviforge.core.models import Evidence, Job
+from eviforge.core.db import create_session_factory
+from eviforge.core.models import Case, Evidence, Job
 from eviforge.core.ingest import ingest_file
 from eviforge.core.custody import log_action
 from eviforge.core.jobs import enqueue_job
@@ -101,7 +101,7 @@ def main():
         job_ids = [j1.id, j2.id, j3.id]
 
     # 6. Run Worker (Burst Mode)
-    print("amp;[*] Processing jobs (Burst Mode)...")
+    print("[*] Processing jobs (Burst Mode)...")
     conn = Redis.from_url(settings.redis_url)
     q = Queue("default", connection=conn)
     w = Worker([q], connection=conn)

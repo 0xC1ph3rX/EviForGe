@@ -27,9 +27,9 @@
       <p class="text-muted text-sm mt-1">Legal authorization acknowledgement.</p>
 
       <!-- Tabs -->
-      <div class="mb-4">
-        <button class="btn btn-sm btn-primary" onclick="showTab('system')">System Health</button>
-        <button class="btn btn-sm btn-outline" onclick="showTab('audit')">Audit Log</button>
+      <div class="tabs mb-4">
+        <button id="tabBtnSystem" class="tab-btn active" type="button" onclick="showTab('system')">System Health</button>
+        <button id="tabBtnAudit" class="tab-btn" type="button" onclick="showTab('audit')">Audit Log</button>
       </div>
 
       <!-- System Tab -->
@@ -45,33 +45,159 @@
           {% endif %}
         </div>
 
-        <!-- Existing Tools Table logic here if needed, or keeping it simple -->
         <div class="card">
-          <h3>Tool Status</h3>
-          <table class="table w-full">
-            <thead>
-              <tr>
-                <th>Tool</th>
-                <th>Status</th>
-                <th>Version/Path</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for tool in tools %}
-              <tr>
-                <td>{{ tool.name }}</td>
-                <td>
-                  {% if tool.enabled %}
-                  <span class="badge badge-success">Active</span>
-                  {% else %}
-                  <span class="badge badge-danger">Missing</span>
-                  {% endif %}
-                </td>
-                <td class="text-mono text-sm">{{ tool.version or tool.path or "N/A" }}</td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
+          <div class="flex between mb-2" style="align-items:flex-start; flex-wrap:wrap;">
+            <div>
+              <h3 style="margin:0;">Defensive Operations Console</h3>
+              <div class="text-muted text-sm mt-1">
+                Operational view for forensic dependencies and runtime module health.
+              </div>
+            </div>
+            <div class="flex" style="flex-wrap:wrap; justify-content:flex-end;">
+              <button class="btn btn-sm btn-outline" type="button" onclick="openDefensiveOps('cases')">Cases</button>
+              <button class="btn btn-sm btn-outline" type="button" onclick="openDefensiveOps('osint')">OSINT</button>
+              <button class="btn btn-sm btn-outline" type="button" onclick="openDefensiveOps('audit')">Audit</button>
+              <button class="btn btn-sm btn-outline" type="button" onclick="copyMissingTools()">Copy Missing</button>
+              <button class="btn btn-sm btn-outline" type="button" onclick="exportToolsReport()">Export JSON</button>
+              <button class="btn btn-sm btn-primary" type="button" onclick="refreshToolsPanel()">Refresh</button>
+            </div>
+          </div>
+
+          <div class="admin-metrics-grid mt-2">
+            <div class="metric-tile">
+              <div class="text-xs text-muted uppercase">Tools Active</div>
+              <div id="metricToolsActive" class="text-xl font-bold mt-1">{{ tools|selectattr("enabled")|list|length }}</div>
+            </div>
+            <div class="metric-tile">
+              <div class="text-xs text-muted uppercase">Tools Missing</div>
+              <div id="metricToolsMissing" class="text-xl font-bold mt-1">{{ tools|rejectattr("enabled")|list|length }}</div>
+            </div>
+            <div class="metric-tile">
+              <div class="text-xs text-muted uppercase">Modules Loaded</div>
+              <div id="metricModulesLoaded" class="text-xl font-bold mt-1">{{ forensic_modules|selectattr("available")|list|length }}</div>
+            </div>
+            <div class="metric-tile">
+              <div class="text-xs text-muted uppercase">Modules Unavailable</div>
+              <div id="metricModulesUnavailable" class="text-xl font-bold mt-1">{{ forensic_modules|rejectattr("available")|list|length }}</div>
+            </div>
+          </div>
+
+          <div id="toolOpsStatus" class="text-muted text-sm mt-2">Using server-rendered state.</div>
+
+          <div class="ops-visual-grid mt-2">
+            <div class="ops-chart-card">
+              <h4>Tool Health Graph</h4>
+              <div id="opsToolGraph" class="metric-bar-list mt-2"></div>
+            </div>
+            <div class="ops-chart-card">
+              <h4>Category Readiness</h4>
+              <div id="opsToolCategoryGraph" class="metric-bar-list mt-2"></div>
+            </div>
+            <div class="ops-chart-card">
+              <h4>Module Health Graph</h4>
+              <div id="opsModuleGraph" class="metric-bar-list mt-2"></div>
+            </div>
+            <div class="ops-chart-card">
+              <h4>Missing Items</h4>
+              <div class="text-xs text-muted mt-1">Tools</div>
+              <div id="opsMissingTools" class="metric-chip-list mt-1"></div>
+              <div class="text-xs text-muted mt-2">Modules</div>
+              <div id="opsMissingModules" class="metric-chip-list mt-1"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>All Tool Status</h3>
+          <div class="text-muted text-sm">Runtime binary and Python forensic dependencies detected in this workspace.</div>
+          <div class="admin-filters admin-tools-filters mt-2">
+            <input id="toolSearch" type="search" placeholder="Search tools, paths, versions...">
+            <select id="toolCategoryFilter">
+              <option value="all" selected>All Categories</option>
+            </select>
+            <select id="toolStateFilter">
+              <option value="all" selected>All States</option>
+              <option value="active">Active</option>
+              <option value="missing">Missing</option>
+            </select>
+            <span class="badge badge-info">Visible: <span id="toolsVisibleCount">{{ tools|length }}</span></span>
+          </div>
+
+          <div class="table-shell mt-2">
+            <table class="table w-full">
+              <thead>
+                <tr>
+                  <th>Tool</th>
+                  <th>Status</th>
+                  <th>Version/Path</th>
+                </tr>
+              </thead>
+              <tbody id="toolsTableBody">
+                {% for tool in tools %}
+                <tr>
+                  <td>{{ tool.name }}</td>
+                  <td>
+                    {% if tool.enabled %}
+                    <span class="badge badge-success">Active</span>
+                    {% else %}
+                    <span class="badge badge-danger">Missing</span>
+                    {% endif %}
+                  </td>
+                  <td class="text-mono text-sm">{{ tool.version or tool.path or "N/A" }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Forensic Modules</h3>
+          <div class="text-muted text-sm">All analysis modules currently registered in the worker. (<span id="forensicModulesCount">{{ forensic_modules|length }}</span> visible)</div>
+          <div class="admin-filters mt-2">
+            <input id="moduleSearch" type="search" placeholder="Search module name or description...">
+            <select id="moduleStateFilter">
+              <option value="all" selected>All States</option>
+              <option value="loaded">Loaded</option>
+              <option value="unavailable">Unavailable</option>
+              <option value="evidence">Requires Evidence</option>
+            </select>
+          </div>
+
+          <div class="table-shell mt-2">
+            <table class="table w-full">
+              <thead>
+                <tr>
+                  <th>Module</th>
+                  <th>Status</th>
+                  <th>Evidence</th>
+                  <th>Description</th>
+                </tr>
+              </thead>
+              <tbody id="forensicModulesBody">
+                {% for mod in forensic_modules %}
+                <tr>
+                  <td class="text-mono text-sm">{{ mod.name }}</td>
+                  <td>
+                    {% if mod.available %}
+                    <span class="badge badge-success">Loaded</span>
+                    {% else %}
+                    <span class="badge badge-danger">Unavailable</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if mod.requires_evidence %}
+                    <span class="badge badge-warning">Required</span>
+                    {% else %}
+                    <span class="badge badge-success">Optional</span>
+                    {% endif %}
+                  </td>
+                  <td class="text-sm">{{ mod.description }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
@@ -96,18 +222,18 @@
               <tbody>
                 {% for log in audit_log %}
                 <tr>
-                  <td class="text-mono text-sm">{{ log.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
-                  <td class="text-mono text-sm">{{ log.actor_username or '-' }}</td>
+                  <td class="text-mono text-sm">{{ log.ts.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                  <td class="text-mono text-sm">{{ log.actor or '-' }}</td>
                   <td class="text-mono text-sm">{{ log.actor_role or '-' }}</td>
                   <td><span class="badge badge-info">{{ log.action }}</span></td>
                   <td class="text-mono text-sm">{% if log.case_id %}<a href="/web/cases/{{ log.case_id }}">{{ log.case_id[:8] }}...</a>{% else %}-{% endif %}</td>
                   <td class="text-mono text-sm">{{ (log.evidence_id[:8] ~ '...') if log.evidence_id else '-' }}</td>
                   <td class="text-mono text-sm">{% if log.job_id %}<a href="/web/jobs/{{ log.job_id }}">{{ log.job_id[:8] }}...</a>{% else %}-{% endif %}</td>
-                  <td class="text-mono text-sm">{{ log.remote_ip or '-' }}</td>
+                  <td class="text-mono text-sm">{{ log.ip or '-' }}</td>
                 </tr>
                 {% else %}
                 <tr>
-                  <td colspan="7" class="text-center text-muted">No audit events found.</td>
+                  <td colspan="8" class="text-center text-muted">No audit events found.</td>
                 </tr>
                 {% endfor %}
               </tbody>
@@ -203,6 +329,38 @@
           <button class="btn btn-primary" type="button" onclick="saveSettings()">Save</button>
         </div>
       </div>
+
+      <div class="card">
+        <h3>Module Orchestrator</h3>
+        <div class="text-muted text-sm">Activate selected forensic modules for a case from one control panel.</div>
+
+        <div class="module-runner-grid mt-2">
+          <div>
+            <label class="text-sm font-bold text-muted" for="runnerCaseSelect">Case</label>
+            <select id="runnerCaseSelect" style="width:100%;">
+              <option value="" selected>Loading cases...</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-sm font-bold text-muted" for="runnerEvidenceSelect">Evidence</label>
+            <select id="runnerEvidenceSelect" style="width:100%;">
+              <option value="" selected>Select case first</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="runner-actions mt-2">
+          <button class="btn btn-sm btn-outline" type="button" id="runnerRefreshCasesBtn">Refresh Cases</button>
+          <button class="btn btn-sm btn-outline" type="button" id="runnerSelectAllBtn">Select All</button>
+          <button class="btn btn-sm btn-outline" type="button" id="runnerSelectRequiredBtn">Required Only</button>
+          <button class="btn btn-sm btn-outline" type="button" id="runnerClearBtn">Clear</button>
+          <button class="btn btn-sm btn-primary" type="button" id="runnerRunBtn">Run Selected</button>
+        </div>
+
+        <div id="runnerStatus" class="text-muted text-sm mt-2">Loading modules...</div>
+        <div id="runnerModuleList" class="module-checklist mt-2"></div>
+        <div id="runnerResults" class="pre-block mt-2" style="max-height:220px; min-height:120px;">No module runs yet.</div>
+      </div>
     </div>
   </div>
 </div>
@@ -210,7 +368,14 @@
 
 {% block scripts %}
 <script type="application/json" id="ackRequiredJson">{{ ack_required|tojson }}</script>
+<script type="application/json" id="toolsInitialJson">{{ tools|tojson }}</script>
+<script type="application/json" id="modulesInitialJson">{{ forensic_modules|tojson }}</script>
 <script>
+  let toolsCache = [];
+  let modulesCache = [];
+  let runnerCasesCache = [];
+  const runnerEvidenceCache = new Map();
+
   function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, (c) => ({
       '&': '&amp;',
@@ -224,6 +389,438 @@
   function showTab(name) {
     document.getElementById('tab-system').style.display = name === 'system' ? 'block' : 'none';
     document.getElementById('tab-audit').style.display = name === 'audit' ? 'block' : 'none';
+    document.getElementById('tabBtnSystem')?.classList.toggle('active', name === 'system');
+    document.getElementById('tabBtnAudit')?.classList.toggle('active', name === 'audit');
+  }
+
+  function setToolOpsStatus(msg, isError = false) {
+    const el = document.getElementById('toolOpsStatus');
+    if (!el) return;
+    el.textContent = msg || '';
+    el.className = isError ? 'text-danger text-sm' : 'text-muted text-sm';
+  }
+
+  function setRunnerStatus(msg, isError = false) {
+    const el = document.getElementById('runnerStatus');
+    if (!el) return;
+    el.textContent = msg || '';
+    el.className = isError ? 'text-danger text-sm' : 'text-muted text-sm';
+  }
+
+  function appendRunnerResult(line) {
+    const el = document.getElementById('runnerResults');
+    if (!el) return;
+    const content = (el.textContent || '').trim();
+    const next = content && content !== 'No module runs yet.'
+      ? `${content}\n${line}`
+      : line;
+    el.textContent = next;
+    el.scrollTop = el.scrollHeight;
+  }
+
+  function populateToolCategoryFilter() {
+    const sel = document.getElementById('toolCategoryFilter');
+    if (!sel) return;
+    const current = sel.value || 'all';
+    const categories = Array.from(new Set((toolsCache || []).map((t) => String(t.category || 'general')))).sort();
+    sel.innerHTML = ['<option value="all">All Categories</option>']
+      .concat(categories.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`))
+      .join('');
+    sel.value = categories.includes(current) ? current : 'all';
+  }
+
+  function updateOpsMetrics() {
+    const activeTools = (toolsCache || []).filter(t => !!t.enabled).length;
+    const missingTools = (toolsCache || []).filter(t => !t.enabled).length;
+    const loadedModules = (modulesCache || []).filter(m => !!m.available).length;
+    const unavailableModules = (modulesCache || []).filter(m => !m.available).length;
+
+    const setText = (id, v) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = String(v);
+    };
+
+    setText('metricToolsActive', activeTools);
+    setText('metricToolsMissing', missingTools);
+    setText('metricModulesLoaded', loadedModules);
+    setText('metricModulesUnavailable', unavailableModules);
+    renderOpsVisuals(activeTools, missingTools, loadedModules, unavailableModules);
+  }
+
+  function renderMetricBars(containerId, rows, emptyText) {
+    const el = document.getElementById(containerId);
+    if (!el) return;
+    if (!rows || !rows.length) {
+      el.innerHTML = `<div class="text-muted text-sm">${escapeHtml(emptyText || 'No data')}</div>`;
+      return;
+    }
+    const max = Math.max(...rows.map(r => Number(r.count) || 0), 1);
+    el.innerHTML = rows.map((row) => {
+      const count = Number(row.count) || 0;
+      const width = count <= 0 ? 4 : Math.max(8, Math.round((count / max) * 100));
+      return `<div class="metric-bar-row">
+        <span class="text-sm text-muted">${escapeHtml(row.label)}</span>
+        <div class="metric-bar-track">
+          <div class="metric-bar-fill ${escapeHtml(row.tone || '')}" style="width:${width}%"></div>
+        </div>
+        <span class="text-mono text-sm">${count}</span>
+      </div>`;
+    }).join('');
+  }
+
+  function renderMetricChips(containerId, items, emptyText, tone = '') {
+    const el = document.getElementById(containerId);
+    if (!el) return;
+    if (!items || !items.length) {
+      el.innerHTML = `<span class="metric-chip">${escapeHtml(emptyText || 'None')}</span>`;
+      return;
+    }
+    el.innerHTML = items.map((item) => `<span class="metric-chip ${tone}">${escapeHtml(item)}</span>`).join('');
+  }
+
+  function renderOpsVisuals(activeTools, missingTools, loadedModules, unavailableModules) {
+    renderMetricBars('opsToolGraph', [
+      { label: 'Active', count: activeTools, tone: 'metric-bar-success' },
+      { label: 'Missing', count: missingTools, tone: 'metric-bar-danger' },
+    ], 'No tools detected.');
+
+    renderMetricBars('opsModuleGraph', [
+      { label: 'Loaded', count: loadedModules, tone: 'metric-bar-info' },
+      { label: 'Unavailable', count: unavailableModules, tone: 'metric-bar-warning' },
+    ], 'No modules detected.');
+
+    const categories = {};
+    for (const tool of toolsCache || []) {
+      const cat = String(tool.category || 'general');
+      if (!categories[cat]) categories[cat] = { total: 0, enabled: 0 };
+      categories[cat].total += 1;
+      if (tool.enabled) categories[cat].enabled += 1;
+    }
+    const categoryRows = Object.keys(categories)
+      .sort()
+      .map((cat) => {
+        const item = categories[cat];
+        return {
+          label: `${cat} (${item.enabled}/${item.total})`,
+          count: item.enabled,
+          tone: item.enabled === item.total ? 'metric-bar-success' : 'metric-bar-warning',
+        };
+      });
+    renderMetricBars('opsToolCategoryGraph', categoryRows, 'No categories.');
+
+    const missingToolNames = (toolsCache || []).filter(t => !t.enabled).map(t => t.name);
+    const missingModuleNames = (modulesCache || []).filter(m => !m.available).map(m => m.name);
+    renderMetricChips('opsMissingTools', missingToolNames, 'No missing tools.', 'metric-chip-danger');
+    renderMetricChips('opsMissingModules', missingModuleNames, 'No missing modules.', 'metric-chip-warning');
+  }
+
+  function toolMatchesFilter(tool) {
+    const q = (document.getElementById('toolSearch')?.value || '').trim().toLowerCase();
+    const category = (document.getElementById('toolCategoryFilter')?.value || 'all');
+    const state = (document.getElementById('toolStateFilter')?.value || 'all');
+    if (state === 'active' && !tool.enabled) return false;
+    if (state === 'missing' && tool.enabled) return false;
+    if (category !== 'all' && String(tool.category || 'general') !== category) return false;
+    if (!q) return true;
+    const text = [tool.name, tool.path, tool.version].map(v => String(v || '').toLowerCase()).join(' ');
+    return text.includes(q);
+  }
+
+  function moduleMatchesFilter(mod) {
+    const q = (document.getElementById('moduleSearch')?.value || '').trim().toLowerCase();
+    const state = (document.getElementById('moduleStateFilter')?.value || 'all');
+    if (state === 'loaded' && !mod.available) return false;
+    if (state === 'unavailable' && mod.available) return false;
+    if (state === 'evidence' && !mod.requires_evidence) return false;
+    if (!q) return true;
+    const text = [mod.name, mod.description].map(v => String(v || '').toLowerCase()).join(' ');
+    return text.includes(q);
+  }
+
+  function applyToolModuleFilters() {
+    renderToolRows((toolsCache || []).filter(toolMatchesFilter));
+    renderForensicModuleRows((modulesCache || []).filter(moduleMatchesFilter));
+  }
+
+  function renderToolRows(tools) {
+    const tbody = document.getElementById('toolsTableBody');
+    if (!tbody) return;
+    const countEl = document.getElementById('toolsVisibleCount');
+    if (countEl) countEl.textContent = String((tools || []).length);
+    if (!tools || !tools.length) {
+      tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">No tools match current filter.</td></tr>';
+      return;
+    }
+    const rows = (tools || []).map((tool) => {
+      const status = tool.enabled
+        ? '<span class="badge badge-success">Active</span>'
+        : '<span class="badge badge-danger">Missing</span>';
+      const vp = escapeHtml(tool.version || tool.path || 'N/A');
+      return `<tr>
+        <td>${escapeHtml(tool.name)}</td>
+        <td>${status}</td>
+        <td class="text-mono text-sm">${vp}</td>
+      </tr>`;
+    });
+    tbody.innerHTML = rows.join('');
+  }
+
+  function renderForensicModuleRows(modules) {
+    const tbody = document.getElementById('forensicModulesBody');
+    const countEl = document.getElementById('forensicModulesCount');
+    if (!tbody) return;
+    if (!modules || !modules.length) {
+      tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">No modules match current filter.</td></tr>';
+      if (countEl) countEl.textContent = '0';
+      return;
+    }
+    const rows = (modules || []).map((mod) => {
+      const status = mod.available
+        ? '<span class="badge badge-success">Loaded</span>'
+        : '<span class="badge badge-danger">Unavailable</span>';
+      const evidence = mod.requires_evidence
+        ? '<span class="badge badge-warning">Required</span>'
+        : '<span class="badge badge-success">Optional</span>';
+      return `<tr>
+        <td class="text-mono text-sm">${escapeHtml(mod.name)}</td>
+        <td>${status}</td>
+        <td>${evidence}</td>
+        <td class="text-sm">${escapeHtml(mod.description || '')}</td>
+      </tr>`;
+    });
+    tbody.innerHTML = rows.join('');
+    if (countEl) countEl.textContent = String((modules || []).length);
+  }
+
+  async function exportToolsReport() {
+    try {
+      const payload = {
+        generated_at: new Date().toISOString(),
+        tools: toolsCache || [],
+        forensic_modules: modulesCache || [],
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `eviforge-tools-report-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      setToolOpsStatus('Tool report exported.');
+    } catch (e) {
+      setToolOpsStatus('Failed to export report.', true);
+    }
+  }
+
+  async function copyMissingTools() {
+    const missing = (toolsCache || []).filter(t => !t.enabled).map(t => t.name);
+    if (!missing.length) {
+      setToolOpsStatus('No missing tools.');
+      return;
+    }
+    const text = missing.join(', ');
+    try {
+      await navigator.clipboard.writeText(text);
+      setToolOpsStatus(`Copied missing tools: ${text}`);
+    } catch (_) {
+      setToolOpsStatus(`Missing tools: ${text}`, true);
+    }
+  }
+
+  function openDefensiveOps(which) {
+    if (which === 'cases') window.location.href = '/web';
+    if (which === 'osint') window.location.href = '/web/osint';
+    if (which === 'audit') showTab('audit');
+    if (which === 'export') exportToolsReport();
+  }
+
+  async function refreshToolsPanel() {
+    try {
+      const res = await apiFetch('/web/admin/tools-data');
+      if (!res.ok) {
+        setToolOpsStatus(`Failed to refresh tools (${res.status})`, true);
+        return;
+      }
+      const data = await res.json();
+      toolsCache = data.tools || [];
+      modulesCache = data.forensic_modules || [];
+      populateToolCategoryFilter();
+      renderRunnerModuleList();
+      updateOpsMetrics();
+      applyToolModuleFilters();
+      setToolOpsStatus(`Refreshed ${toolsCache.length} tools and ${modulesCache.length} modules.`);
+    } catch (_) {
+      // Keep server-rendered rows if refresh fails.
+      setToolOpsStatus('Refresh unavailable; showing last known status.', true);
+    }
+  }
+
+  function renderRunnerModuleList() {
+    const el = document.getElementById('runnerModuleList');
+    if (!el) return;
+    const selected = new Set(
+      Array.from(document.querySelectorAll('.runner-module-check:checked')).map((cb) => cb.value)
+    );
+    if (!modulesCache.length) {
+      el.innerHTML = '<div class="text-muted text-sm">No modules available in this runtime.</div>';
+      return;
+    }
+    const rows = (modulesCache || []).slice().sort((a, b) => String(a.name).localeCompare(String(b.name))).map((mod) => {
+      const name = String(mod.name || '');
+      const available = !!mod.available;
+      const requiresEvidence = !!mod.requires_evidence;
+      const checked = selected.has(name) && available ? 'checked' : '';
+      const disabled = available ? '' : 'disabled';
+      const availabilityBadge = available
+        ? '<span class="badge badge-success">Loaded</span>'
+        : '<span class="badge badge-danger">Unavailable</span>';
+      const evidenceBadge = requiresEvidence
+        ? '<span class="badge badge-warning">Evidence</span>'
+        : '<span class="badge badge-info">Case-wide</span>';
+      return `<label class="module-check-item ${available ? '' : 'is-disabled'}">
+        <input class="runner-module-check" type="checkbox" value="${escapeHtml(name)}" ${checked} ${disabled}>
+        <span class="module-check-name text-mono text-sm">${escapeHtml(name)}</span>
+        <span class="module-check-meta">${availabilityBadge}${evidenceBadge}</span>
+      </label>`;
+    });
+    el.innerHTML = rows.join('');
+    setRunnerStatus(`Modules ready: ${(modulesCache || []).filter(m => !!m.available).length}/${modulesCache.length}`);
+  }
+
+  function setRunnerSelection(mode) {
+    const checks = Array.from(document.querySelectorAll('.runner-module-check'));
+    for (const cb of checks) {
+      if (cb.disabled) continue;
+      const row = cb.closest('.module-check-item');
+      const needsEvidence = row?.querySelector('.badge-warning') !== null;
+      if (mode === 'all') cb.checked = true;
+      if (mode === 'required') cb.checked = needsEvidence;
+      if (mode === 'none') cb.checked = false;
+    }
+  }
+
+  function getRunnerSelectedModules() {
+    return Array.from(document.querySelectorAll('.runner-module-check:checked')).map((cb) => String(cb.value));
+  }
+
+  async function loadRunnerCases() {
+    const caseSel = document.getElementById('runnerCaseSelect');
+    if (!caseSel) return;
+    const previous = caseSel.value || '';
+    runnerEvidenceCache.clear();
+    setRunnerStatus('Loading cases...');
+    const res = await apiFetch('/api/cases');
+    if (!res.ok) {
+      setRunnerStatus(`Failed to load cases (${res.status})`, true);
+      return;
+    }
+    runnerCasesCache = await res.json();
+    caseSel.innerHTML = ['<option value="" selected>Select case...</option>']
+      .concat((runnerCasesCache || []).map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)} [${escapeHtml(String(c.id).slice(0, 8))}]</option>`))
+      .join('');
+    const found = (runnerCasesCache || []).some((c) => c.id === previous);
+    if (found) caseSel.value = previous;
+    else if (runnerCasesCache.length) caseSel.value = runnerCasesCache[0].id;
+    await loadRunnerEvidence(caseSel.value || '');
+  }
+
+  async function loadRunnerEvidence(caseId) {
+    const evSel = document.getElementById('runnerEvidenceSelect');
+    if (!evSel) return;
+    if (!caseId) {
+      evSel.innerHTML = '<option value="" selected>Select case first</option>';
+      setRunnerStatus('Select case to load evidence.');
+      return;
+    }
+    if (runnerEvidenceCache.has(caseId)) {
+      const cached = runnerEvidenceCache.get(caseId) || [];
+      evSel.innerHTML = ['<option value="" selected>Select evidence...</option>']
+        .concat(cached.map((e) => `<option value="${escapeHtml(e.id)}">${escapeHtml(e.filename)} [${escapeHtml(String(e.id).slice(0, 8))}]</option>`))
+        .join('');
+      setRunnerStatus(`Loaded ${cached.length} evidence items.`);
+      return;
+    }
+    setRunnerStatus('Loading evidence...');
+    const res = await apiFetch(`/api/cases/${encodeURIComponent(caseId)}/evidence`);
+    if (!res.ok) {
+      evSel.innerHTML = '<option value="" selected>Failed to load evidence</option>';
+      setRunnerStatus(`Failed to load evidence (${res.status})`, true);
+      return;
+    }
+    const evidence = await res.json();
+    runnerEvidenceCache.set(caseId, evidence);
+    evSel.innerHTML = ['<option value="" selected>Select evidence...</option>']
+      .concat((evidence || []).map((e) => `<option value="${escapeHtml(e.id)}">${escapeHtml(e.filename)} [${escapeHtml(String(e.id).slice(0, 8))}]</option>`))
+      .join('');
+    setRunnerStatus(`Loaded ${evidence.length} evidence items.`);
+  }
+
+  async function responseErrorText(res) {
+    try {
+      const data = await res.json();
+      if (typeof data?.detail === 'string') return data.detail;
+      if (data?.detail) return JSON.stringify(data.detail);
+      return JSON.stringify(data);
+    } catch (_) {
+      try {
+        return await res.text();
+      } catch (_) {
+        return 'Unknown error';
+      }
+    }
+  }
+
+  async function runSelectedModules() {
+    const caseId = document.getElementById('runnerCaseSelect')?.value || '';
+    const evidenceId = document.getElementById('runnerEvidenceSelect')?.value || '';
+    const selectedModules = getRunnerSelectedModules();
+    if (!caseId) {
+      setRunnerStatus('Select a case first.', true);
+      return;
+    }
+    if (!selectedModules.length) {
+      setRunnerStatus('Select at least one module.', true);
+      return;
+    }
+
+    const selectedMeta = selectedModules
+      .map((name) => modulesCache.find((m) => String(m.name) === name))
+      .filter((m) => !!m);
+    const needsEvidence = selectedMeta.some((m) => !!m.requires_evidence);
+    if (needsEvidence && !evidenceId) {
+      setRunnerStatus('Selected modules require evidence. Choose evidence first.', true);
+      return;
+    }
+
+    let okCount = 0;
+    let failCount = 0;
+    appendRunnerResult(`--- Run ${new Date().toISOString()} case=${caseId.slice(0, 8)} modules=${selectedModules.length} ---`);
+    for (let i = 0; i < selectedModules.length; i += 1) {
+      const moduleName = selectedModules[i];
+      const meta = modulesCache.find((m) => String(m.name) === moduleName) || {};
+      const reqEvidence = !!meta.requires_evidence;
+      setRunnerStatus(`Running ${moduleName} (${i + 1}/${selectedModules.length})...`);
+      const res = await apiFetch(`/api/cases/${encodeURIComponent(caseId)}/jobs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          module: moduleName,
+          evidence_id: reqEvidence ? evidenceId : null,
+          params: {},
+        }),
+      });
+      if (!res.ok) {
+        failCount += 1;
+        appendRunnerResult(`[FAIL] ${moduleName} (${res.status}) ${await responseErrorText(res)}`);
+        continue;
+      }
+      okCount += 1;
+      const data = await res.json();
+      appendRunnerResult(`[OK] ${moduleName} -> job ${String(data.id || '').slice(0, 8)} (${data.status || 'PENDING'})`);
+    }
+    setRunnerStatus(`Module run completed. Success: ${okCount}, Failed: ${failCount}${failCount ? ' (check logs below)' : ''}.`, failCount > 0);
   }
 
   async function submitAck() {
@@ -378,5 +975,27 @@ async function saveSettings() {
 
 loadUsers();
 loadSettings();
+toolsCache = JSON.parse(document.getElementById('toolsInitialJson').textContent || '[]');
+modulesCache = JSON.parse(document.getElementById('modulesInitialJson').textContent || '[]');
+document.getElementById('toolSearch')?.addEventListener('input', applyToolModuleFilters);
+document.getElementById('toolCategoryFilter')?.addEventListener('change', applyToolModuleFilters);
+document.getElementById('toolStateFilter')?.addEventListener('change', applyToolModuleFilters);
+document.getElementById('moduleSearch')?.addEventListener('input', applyToolModuleFilters);
+document.getElementById('moduleStateFilter')?.addEventListener('change', applyToolModuleFilters);
+document.getElementById('runnerRefreshCasesBtn')?.addEventListener('click', loadRunnerCases);
+document.getElementById('runnerCaseSelect')?.addEventListener('change', async (e) => {
+  await loadRunnerEvidence(e.target.value || '');
+});
+document.getElementById('runnerSelectAllBtn')?.addEventListener('click', () => setRunnerSelection('all'));
+document.getElementById('runnerSelectRequiredBtn')?.addEventListener('click', () => setRunnerSelection('required'));
+document.getElementById('runnerClearBtn')?.addEventListener('click', () => setRunnerSelection('none'));
+document.getElementById('runnerRunBtn')?.addEventListener('click', runSelectedModules);
+populateToolCategoryFilter();
+renderRunnerModuleList();
+showTab('system');
+updateOpsMetrics();
+applyToolModuleFilters();
+refreshToolsPanel();
+loadRunnerCases();
 </script>
 {% endblock %}

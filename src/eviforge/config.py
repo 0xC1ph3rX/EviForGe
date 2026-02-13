@@ -18,7 +18,41 @@ class Settings:
     bind_port: int
 
 
+def _load_dotenv() -> None:
+    """
+    Lightweight `.env` loader for local/dev workflows.
+    Existing process env vars always win.
+    """
+    env_path = Path(".env")
+    if not env_path.exists() or not env_path.is_file():
+        return
+
+    try:
+        lines = env_path.read_text(encoding="utf-8").splitlines()
+    except Exception:
+        return
+
+    for raw_line in lines:
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[7:].strip()
+        if "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if not key or key in os.environ:
+            continue
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+            value = value[1:-1]
+        os.environ[key] = value
+
+
 def load_settings() -> Settings:
+    _load_dotenv()
+
     data_dir = Path(os.getenv("EVIFORGE_DATA_DIR", "./.eviforge")).resolve()
     vault_dir = Path(os.getenv("EVIFORGE_VAULT_DIR", str(data_dir / "vault"))).resolve()
     database_url = os.getenv("EVIFORGE_DATABASE_URL", f"sqlite:///{(data_dir / 'eviforge.db').as_posix()}")

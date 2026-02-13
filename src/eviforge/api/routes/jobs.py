@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from eviforge.core.auth import ack_dependency, get_current_active_user, User
 from eviforge.config import load_settings
@@ -26,8 +26,7 @@ class JobResponse(BaseModel):
     output_files: list[str] = []
     error: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 @router.get("/{job_id}", response_model=JobResponse)
