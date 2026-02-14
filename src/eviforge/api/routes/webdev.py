@@ -11,6 +11,7 @@ from typing import Any
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+import requests
 
 from eviforge.core.auth import ALGORITHM, SECRET_KEY, JWTError, jwt
 from eviforge.config import ACK_TEXT, load_settings
@@ -395,6 +396,66 @@ def _build_osint_analytics(tools: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _is_truthy_env(name: str) -> bool:
+    return os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _http_probe(url: str, headers: dict[str, str] | None = None) -> tuple[bool, str]:
+    try:
+        r = requests.get(url, headers=headers or {}, timeout=4)
+        if 200 <= r.status_code < 400:
+            return True, f"HTTP {r.status_code}"
+        return False, f"HTTP {r.status_code}"
+    except Exception as exc:
+        return False, str(exc)
+
+
+def _facecheck_service_status() -> dict[str, Any]:
+    """
+    FaceCheck service is only considered active when operator explicitly enables
+    and configures a working API endpoint. Otherwise it is hidden from UI.
+    """
+    api_enabled = _is_truthy_env("EVIFORGE_ENABLE_FACECHECK_SERVICE")
+    api_url = os.getenv("EVIFORGE_FACECHECK_API_URL", "").strip()
+    api_key = os.getenv("EVIFORGE_FACECHECK_API_KEY", "").strip()
+
+    base = {
+        "id": "facecheck_remove",
+        "name": "FaceCheck - Remove My Photos",
+        "category": "photo_removal",
+        "mode": "api",
+        "provider": "facecheck",
+        "action_type": "remove_my_photos",
+        "url": api_url or None,
+    }
+
+    if not api_enabled:
+        return {
+            **base,
+            "available": False,
+            "reason": "disabled",
+        }
+
+    if not api_url or not api_key:
+        return {
+            **base,
+            "available": False,
+            "reason": "missing_api_config",
+        }
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "X-API-Key": api_key,
+    }
+    ok, details = _http_probe(api_url, headers=headers)
+    return {
+        **base,
+        "available": ok,
+        "reason": "ok" if ok else "probe_failed",
+        "details": details,
+    }
+
+
 @router.get("/osint/tools-data")
 async def web_osint_tools_data(request: Request):
     user = _web_user_from_cookie(request)
@@ -402,14 +463,17 @@ async def web_osint_tools_data(request: Request):
         raise HTTPException(status_code=401, detail="Not authenticated")
 
     tools = _osint_tool_statuses()
+    services = [_facecheck_service_status()]
+    active_services = [svc for svc in services if bool(svc.get("available"))]
     resources = [
-        {"name": "FaceCheck - Remove My Photos", "url": "https://facecheck.id/removemyphotos", "category": "photo_removal"},
         {"name": "FTC Consumer Advice", "url": "https://www.consumer.ftc.gov/", "category": "privacy"},
         {"name": "Have I Been Pwned", "url": "https://haveibeenpwned.com/", "category": "breach"},
     ]
     return {
         "tools": tools,
         "analytics": _build_osint_analytics(tools),
+        "services": services,
+        "active_services": active_services,
         "resources": resources,
         "role": user.role,
     }

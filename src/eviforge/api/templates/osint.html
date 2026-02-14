@@ -59,13 +59,10 @@
       <h3>External Resources</h3>
       <div class="text-muted text-sm mt-1">Use external portals directly and track each step in the action log.</div>
 
-      <h4 class="mt-2">Photo Removal</h4>
-      <ul class="osint-links">
-        <li>
-          <a href="https://facecheck.id/removemyphotos" target="_blank" rel="noreferrer">
-            FaceCheck - Remove My Photos
-          </a>
-        </li>
+      <h4 class="mt-2">Integrated Services</h4>
+      <div id="osintServiceStatus" class="text-muted text-sm mt-1">Checking service integrations...</div>
+      <ul id="osintServiceList" class="osint-links mt-1">
+        <li class="text-muted">Loading service integrations...</li>
       </ul>
 
       <h4 class="mt-2">General Privacy</h4>
@@ -227,11 +224,16 @@
   const actionStatusFilterEl = document.getElementById('actionStatusFilter');
   const osintToolSearchEl = document.getElementById('osintToolSearch');
   const osintToolsTbodyEl = document.getElementById('osintToolsTbody');
+  const osintServiceStatusEl = document.getElementById('osintServiceStatus');
+  const osintServiceListEl = document.getElementById('osintServiceList');
+  const providerSelectEl = document.getElementById('newProvider');
 
   const ACTION_STATUSES = ['draft', 'submitted', 'in_review', 'completed', 'failed'];
   let casesCache = [];
   let actionsCache = [];
   let osintToolsCache = [];
+  let osintServicesCache = [];
+  let osintActiveServicesCache = [];
 
   function esc(s) {
     return String(s ?? '').replace(/[&<>"']/g, (c) => ({
@@ -255,6 +257,12 @@
   function setMetric(id, value) {
     const el = document.getElementById(id);
     if (el) el.textContent = String(value);
+  }
+
+  function setServiceStatus(msg, isError = false) {
+    if (!osintServiceStatusEl) return;
+    osintServiceStatusEl.textContent = msg || '';
+    osintServiceStatusEl.className = isError ? 'text-danger text-sm mt-1' : 'text-muted text-sm mt-1';
   }
 
   function updateMetrics() {
@@ -381,12 +389,74 @@
     }).join('');
   }
 
+  function syncProviderOptions() {
+    if (!providerSelectEl) return;
+    const hasFacecheck = (osintActiveServicesCache || []).some((s) => String(s.provider) === 'facecheck');
+    const existing = providerSelectEl.querySelector('option[value="facecheck"]');
+    if (hasFacecheck && !existing) {
+      const opt = document.createElement('option');
+      opt.value = 'facecheck';
+      opt.textContent = 'facecheck';
+      providerSelectEl.insertBefore(opt, providerSelectEl.firstChild);
+    }
+    if (!hasFacecheck && existing) {
+      const selectedFacecheck = providerSelectEl.value === 'facecheck';
+      existing.remove();
+      if (selectedFacecheck && providerSelectEl.options.length) {
+        providerSelectEl.value = providerSelectEl.options[0].value;
+      }
+    }
+  }
+
+  function renderOsintServices() {
+    if (!osintServiceListEl) return;
+    const active = osintActiveServicesCache || [];
+    if (!active.length) {
+      osintServiceListEl.innerHTML = '<li class="text-muted">No verified API integrations configured.</li>';
+      const facecheck = (osintServicesCache || []).find((s) => String(s.id) === 'facecheck_remove');
+      if (facecheck) {
+        if (facecheck.reason === 'missing_api_config') {
+          setServiceStatus('FaceCheck hidden: API URL/key not configured.', true);
+        } else if (facecheck.reason === 'probe_failed') {
+          setServiceStatus(`FaceCheck hidden: endpoint check failed (${facecheck.details || 'unreachable'}).`, true);
+        } else if (facecheck.reason === 'disabled') {
+          setServiceStatus('FaceCheck hidden: service disabled by configuration.', true);
+        } else {
+          setServiceStatus('No verified API services available.', true);
+        }
+      } else {
+        setServiceStatus('No verified API services available.', true);
+      }
+      syncProviderOptions();
+      return;
+    }
+
+    osintServiceListEl.innerHTML = active.map((svc) => {
+      const url = String(svc.url || '').trim();
+      const label = esc(svc.name || svc.id || 'service');
+      const details = esc(svc.details || '');
+      const linkHtml = url
+        ? `<a href="${esc(url)}" target="_blank" rel="noreferrer">${label}</a>`
+        : `<span>${label}</span>`;
+      return `<li>
+        ${linkHtml}
+        <span class="badge badge-success" style="margin-left:0.45rem;">API Ready</span>
+        ${details ? `<div class="text-xs text-muted mt-1">${details}</div>` : ''}
+      </li>`;
+    }).join('');
+    setServiceStatus(`Active integrations: ${active.map((s) => s.name).join(', ')}`);
+    syncProviderOptions();
+  }
+
   async function loadOsintTools() {
     const res = await apiFetch('/web/osint/tools-data');
     if (!res.ok) {
       if (osintToolsTbodyEl) {
         osintToolsTbodyEl.innerHTML = `<tr><td colspan="4" class="text-muted text-center">Failed to load tool status (${res.status}).</td></tr>`;
       }
+      osintServicesCache = [];
+      osintActiveServicesCache = [];
+      renderOsintServices();
       setMetric('metricOsintToolTotal', 0);
       setMetric('metricOsintToolEnabled', 0);
       renderGraphBars('osintToolGraph', [], 'Failed to load tool data.');
@@ -395,8 +465,11 @@
 
     const data = await res.json();
     osintToolsCache = data.tools || [];
+    osintServicesCache = data.services || [];
+    osintActiveServicesCache = data.active_services || [];
     updateOsintToolMetrics();
     renderOsintTools();
+    renderOsintServices();
   }
 
   function renderActions() {

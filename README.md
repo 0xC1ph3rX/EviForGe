@@ -70,6 +70,9 @@ Open:
 - Admin tools panel: login as admin and open `/web/admin` to see all detected tools and registered forensic modules.
 - OSINT tool tracker: open `/web/osint` for case-linked action tracking (provider/type/status/attachments).
 - OSINT runtime toolkit panel: `/web/osint` now includes local OSINT/DNS/HTTP tool availability graph + searchable table.
+- FaceCheck integration is API-gated:
+  - Hidden by default unless API config + probe succeeds.
+  - Configure with `EVIFORGE_ENABLE_FACECHECK_SERVICE=1`, `EVIFORGE_FACECHECK_API_URL`, `EVIFORGE_FACECHECK_API_KEY`.
 - Command palette is docked on the left workflow side (open with `Ctrl/Cmd+K`).
 
 Local admin login (panel):
@@ -136,6 +139,9 @@ Common variables:
 - `EVIFORGE_DATABASE_URL`
 - `EVIFORGE_REDIS_URL`
 - `EVIFORGE_JOB_EXECUTION` (`auto|inline|queue`)
+- `EVIFORGE_ENABLE_FACECHECK_SERVICE` (`0|1`)
+- `EVIFORGE_FACECHECK_API_URL`
+- `EVIFORGE_FACECHECK_API_KEY`
 
 ## Example API Workflow (Import -> Analyze -> Filter -> Export)
 
