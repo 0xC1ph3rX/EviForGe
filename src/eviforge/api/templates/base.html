@@ -14,13 +14,21 @@
         <aside class="sidebar">
             <div class="sidebar-brand">
                 <a href="/web" class="brand-link">EviForge</a>
-                <div class="text-muted text-xs">Local-first DFIR console</div>
+                <div class="hacker-label">Local-first DFIR console</div>
+                <div class="sidebar-pulse">
+                    <span class="pulse-dot"></span>
+                    <span class="text-xs">Secure Local Session</span>
+                </div>
             </div>
             <nav class="sidebar-nav">
                 <a href="/web" class="{% if request.url.path == '/web' or request.url.path.startswith('/web/cases') or request.url.path.startswith('/web/jobs') %}active{% endif %}">Cases</a>
                 <a href="/web/osint" class="{% if '/osint' in request.url.path %}active{% endif %}">OSINT &amp; Privacy</a>
                 <a href="/web/admin" class="{% if '/admin' in request.url.path %}active{% endif %}">Admin</a>
             </nav>
+            <div class="sidebar-shortcuts">
+                <button class="btn btn-sm btn-outline w-full" id="paletteFromSidebar" type="button">Command Palette</button>
+                <div class="text-xs text-muted">`Ctrl/Cmd + K` to jump anywhere.</div>
+            </div>
             <div class="sidebar-footer text-xs text-muted">
                 <div>Offline-first • No telemetry</div>
             </div>
@@ -30,8 +38,11 @@
             <header class="topbar">
                 <div class="topbar-title">
                     <h1>EviForge</h1>
+                    <div class="text-xs text-muted topbar-subline" id="opsContext">Operational view</div>
                 </div>
                 <div class="user-menu">
+                    <span class="badge badge-info text-mono" id="opsClock">--:--:-- UTC</span>
+                    <button class="btn btn-sm btn-outline" id="commandPaletteBtn" type="button">Commands</button>
                     <button class="btn btn-sm btn-outline" id="themeToggle" type="button">Theme</button>
                     <a class="btn btn-sm btn-outline" href="/web/login" id="loginLink">Login</a>
                     <button class="btn btn-sm btn-outline" id="logoutBtn" type="button" style="display:none;">Logout</button>
@@ -49,6 +60,21 @@
             </footer>
         </div>
     </div>
+
+    <div id="commandPaletteBackdrop" class="command-palette-backdrop" hidden></div>
+    <section id="commandPalette" class="command-palette" hidden aria-hidden="true">
+        <div class="command-palette-head">
+            <div>
+                <div class="hacker-label">Navigation Console</div>
+                <h3>Command Palette</h3>
+            </div>
+            <button type="button" class="btn btn-sm btn-outline" id="closeCommandPalette">Close</button>
+        </div>
+        <input id="commandSearch" type="search" autocomplete="off" placeholder="Type a command: dashboard, osint, new case, theme..." />
+        <div id="commandResults" class="command-results"></div>
+    </section>
+
+    <div id="toastStack" class="toast-stack" aria-live="polite" aria-atomic="true"></div>
 
     <script>
         function getAccessToken() {
@@ -69,13 +95,16 @@
             const token = getAccessToken();
             const loginLink = document.getElementById('loginLink');
             const logoutBtn = document.getElementById('logoutBtn');
+            const paletteBtn = document.getElementById('commandPaletteBtn');
             if (!loginLink || !logoutBtn) return;
             if (token) {
                 loginLink.style.display = 'none';
                 logoutBtn.style.display = 'inline-flex';
+                if (paletteBtn) paletteBtn.style.display = 'inline-flex';
             } else {
                 loginLink.style.display = 'inline-flex';
                 logoutBtn.style.display = 'none';
+                if (paletteBtn) paletteBtn.style.display = 'inline-flex';
             }
         }
 
@@ -103,22 +132,178 @@
         function initTheme() {
             const t = localStorage.getItem('eviforge_theme') || 'dark';
             document.body.classList.toggle('dark', t !== 'light');
+            syncThemeButtonLabel();
         }
 
         function toggleTheme() {
             const isDark = document.body.classList.toggle('dark');
             localStorage.setItem('eviforge_theme', isDark ? 'dark' : 'light');
+            syncThemeButtonLabel();
+            showToast(`Theme switched to ${isDark ? 'dark' : 'light'} mode`);
+        }
+
+        function syncThemeButtonLabel() {
+            const themeToggle = document.getElementById('themeToggle');
+            if (!themeToggle) return;
+            themeToggle.textContent = document.body.classList.contains('dark') ? 'Light Theme' : 'Dark Theme';
+        }
+
+        function showToast(message, tone = 'info') {
+            const stack = document.getElementById('toastStack');
+            if (!stack) return;
+            const item = document.createElement('div');
+            item.className = `toast-item toast-${tone}`;
+            item.textContent = message;
+            stack.appendChild(item);
+            setTimeout(() => {
+                item.classList.add('is-leaving');
+                setTimeout(() => item.remove(), 220);
+            }, 2400);
+        }
+
+        function updateOpsClock() {
+            const el = document.getElementById('opsClock');
+            if (!el) return;
+            const now = new Date();
+            el.textContent = `${now.toISOString().slice(11, 19)} UTC`;
+        }
+
+        function updateOpsContext() {
+            const el = document.getElementById('opsContext');
+            if (!el) return;
+            const path = window.location.pathname.replace(/^\/web/, '') || '/';
+            el.textContent = `Context: ${path}`;
+        }
+
+        function getPaletteCommands() {
+            return [
+                { label: 'Open Dashboard', keywords: 'home cases dashboard', path: '/web', shortcut: 'Alt+1' },
+                { label: 'Open OSINT Workspace', keywords: 'osint privacy actions', path: '/web/osint', shortcut: 'Alt+2' },
+                { label: 'Open Admin Panel', keywords: 'admin tools modules', path: '/web/admin', shortcut: 'Alt+3' },
+                {
+                    label: 'Create New Case',
+                    keywords: 'new case create',
+                    shortcut: 'Ctrl+N',
+                    action: () => window.dispatchEvent(new CustomEvent('eviforge:new-case')),
+                },
+                {
+                    label: 'Toggle Theme',
+                    keywords: 'dark light appearance',
+                    action: () => toggleTheme(),
+                },
+                {
+                    label: 'Log Out',
+                    keywords: 'logout sign out',
+                    action: async () => {
+                        try { await apiFetch('/api/auth/logout', { method: 'POST' }); } catch { }
+                        clearAccessToken();
+                        window.location.href = '/web/login';
+                    },
+                },
+            ];
+        }
+
+        function renderCommandResults(filter = '') {
+            const host = document.getElementById('commandResults');
+            if (!host) return;
+            const term = (filter || '').trim().toLowerCase();
+            const rows = getPaletteCommands().filter((item) => {
+                const hay = `${item.label} ${item.keywords || ''}`.toLowerCase();
+                return !term || hay.includes(term);
+            });
+            if (!rows.length) {
+                host.innerHTML = '<div class="command-empty">No matching commands.</div>';
+                return;
+            }
+            host.innerHTML = rows.map((item, idx) => `
+                <button type="button" class="command-item" data-index="${idx}">
+                    <span>${item.label}</span>
+                    <span class="text-xs text-muted">${item.shortcut || ''}</span>
+                </button>
+            `).join('');
+            const commandList = getPaletteCommands().filter((item) => {
+                const hay = `${item.label} ${item.keywords || ''}`.toLowerCase();
+                return !term || hay.includes(term);
+            });
+            host.querySelectorAll('.command-item').forEach((btn, index) => {
+                btn.addEventListener('click', async () => {
+                    const cmd = commandList[index];
+                    if (!cmd) return;
+                    closeCommandPalette();
+                    if (cmd.path) {
+                        window.location.href = cmd.path;
+                        return;
+                    }
+                    if (typeof cmd.action === 'function') {
+                        await cmd.action();
+                    }
+                });
+            });
+        }
+
+        function openCommandPalette() {
+            const panel = document.getElementById('commandPalette');
+            const backdrop = document.getElementById('commandPaletteBackdrop');
+            const input = document.getElementById('commandSearch');
+            if (!panel || !backdrop || !input) return;
+            const useBackdrop = window.matchMedia('(max-width: 900px)').matches;
+            panel.hidden = false;
+            backdrop.hidden = !useBackdrop;
+            panel.setAttribute('aria-hidden', 'false');
+            input.value = '';
+            renderCommandResults('');
+            setTimeout(() => input.focus(), 10);
+        }
+
+        function closeCommandPalette() {
+            const panel = document.getElementById('commandPalette');
+            const backdrop = document.getElementById('commandPaletteBackdrop');
+            if (!panel || !backdrop) return;
+            panel.hidden = true;
+            backdrop.hidden = true;
+            panel.setAttribute('aria-hidden', 'true');
         }
 
         document.getElementById('themeToggle')?.addEventListener('click', toggleTheme);
+        document.getElementById('commandPaletteBtn')?.addEventListener('click', openCommandPalette);
+        document.getElementById('paletteFromSidebar')?.addEventListener('click', openCommandPalette);
+        document.getElementById('closeCommandPalette')?.addEventListener('click', closeCommandPalette);
+        document.getElementById('commandPaletteBackdrop')?.addEventListener('click', closeCommandPalette);
+        document.getElementById('commandSearch')?.addEventListener('input', (e) => {
+            renderCommandResults(e.target.value || '');
+        });
+
         document.getElementById('logoutBtn')?.addEventListener('click', async () => {
             try { await apiFetch('/api/auth/logout', { method: 'POST' }); } catch { }
             clearAccessToken();
             window.location.href = '/web/login';
         });
 
+        document.addEventListener('keydown', (event) => {
+            const cmdShortcut = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k';
+            if (cmdShortcut) {
+                event.preventDefault();
+                openCommandPalette();
+                return;
+            }
+            if (event.key === 'Escape') {
+                closeCommandPalette();
+                return;
+            }
+            if (event.altKey && event.key === '1') window.location.href = '/web';
+            if (event.altKey && event.key === '2') window.location.href = '/web/osint';
+            if (event.altKey && event.key === '3') window.location.href = '/web/admin';
+        });
+
+        window.showToast = showToast;
+        window.openCommandPalette = openCommandPalette;
+
         initTheme();
         refreshAuthUI();
+        updateOpsClock();
+        updateOpsContext();
+        renderCommandResults('');
+        setInterval(updateOpsClock, 1000);
     </script>
 
     {% block scripts %}{% endblock %}

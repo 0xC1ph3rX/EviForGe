@@ -354,6 +354,7 @@
           <button class="btn btn-sm btn-outline" type="button" id="runnerSelectAllBtn">Select All</button>
           <button class="btn btn-sm btn-outline" type="button" id="runnerSelectRequiredBtn">Required Only</button>
           <button class="btn btn-sm btn-outline" type="button" id="runnerClearBtn">Clear</button>
+          <button class="btn btn-sm btn-outline" type="button" id="runnerRunAllBtn">Run All Loaded</button>
           <button class="btn btn-sm btn-primary" type="button" id="runnerRunBtn">Run Selected</button>
         </div>
 
@@ -697,6 +698,7 @@
       const needsEvidence = row?.querySelector('.badge-warning') !== null;
       if (mode === 'all') cb.checked = true;
       if (mode === 'required') cb.checked = needsEvidence;
+      if (mode === 'available') cb.checked = !cb.disabled;
       if (mode === 'none') cb.checked = false;
     }
   }
@@ -989,6 +991,10 @@ document.getElementById('runnerCaseSelect')?.addEventListener('change', async (e
 document.getElementById('runnerSelectAllBtn')?.addEventListener('click', () => setRunnerSelection('all'));
 document.getElementById('runnerSelectRequiredBtn')?.addEventListener('click', () => setRunnerSelection('required'));
 document.getElementById('runnerClearBtn')?.addEventListener('click', () => setRunnerSelection('none'));
+document.getElementById('runnerRunAllBtn')?.addEventListener('click', async () => {
+  setRunnerSelection('available');
+  await runSelectedModules();
+});
 document.getElementById('runnerRunBtn')?.addEventListener('click', runSelectedModules);
 populateToolCategoryFilter();
 renderRunnerModuleList();

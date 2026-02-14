@@ -57,6 +57,12 @@ If port `8000` is already in use, run on another port:
 eviforge api --port 8001
 ```
 
+Install/repair optional DFIR dependencies:
+```bash
+bash scripts/install_dfir_dependencies.sh
+bash scripts/install_dfir_dependencies.sh --apply
+```
+
 Open:
 - Web UI: `http://127.0.0.1:8000/web`
 - API docs: `http://127.0.0.1:8000/api/docs`
@@ -64,6 +70,7 @@ Open:
 - Admin tools panel: login as admin and open `/web/admin` to see all detected tools and registered forensic modules.
 - OSINT tool tracker: open `/web/osint` for case-linked action tracking (provider/type/status/attachments).
 - OSINT runtime toolkit panel: `/web/osint` now includes local OSINT/DNS/HTTP tool availability graph + searchable table.
+- Command palette is docked on the left workflow side (open with `Ctrl/Cmd+K`).
 
 Local admin login (panel):
 ```bash
@@ -102,6 +109,7 @@ Desktop workflow:
 2. Use the Wireshark-style filter bar (`preset + query + apply/clear`).
 3. Select cases/evidence/modules/jobs from the searchable sidebar.
 4. Run modules from the Module Runner drawer (`Run Selected` with per-module progress).
+   - Use `Run All Loaded` in Admin -> Module Orchestrator to queue every available module for the selected case.
 5. Inspect rows in the center sortable table and analyze details on the right tabs (`Decoded`, `Raw`, `Metadata`).
 6. Export filtered rows to JSON/CSV from the toolbar.
 

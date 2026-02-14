@@ -1,17 +1,18 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 import importlib
 import shutil
 import subprocess
+import sys
 from typing import Any
 
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from jose import JWTError, jwt
 
-from eviforge.core.auth import ALGORITHM, SECRET_KEY
+from eviforge.core.auth import ALGORITHM, SECRET_KEY, JWTError, jwt
 from eviforge.config import ACK_TEXT, load_settings
 from eviforge.core.db import create_session_factory, get_setting
 from eviforge.core.models import AuditLog, User
@@ -95,19 +96,84 @@ def _redact_url(url: str) -> str:
     return f"{scheme}://***@{host}"
 
 
-def _tool_status(name: str, version_args: list[str] | None = None, *, category: str = "general") -> dict:
-    path = shutil.which(name)
-    if not path:
-        return {"name": name, "enabled": False, "path": None, "version": None, "category": category}
-    version = None
-    if version_args:
+def _first_non_empty_line(text: str) -> str | None:
+    for line in (text or "").splitlines():
+        stripped = line.strip()
+        if stripped:
+            return stripped
+    return None
+
+
+def _looks_like_invalid_probe(line: str | None, probe_args: list[str]) -> bool:
+    if not line:
+        return True
+    low = line.lower()
+    if "cannot open file --version" in low:
+        return True
+    if "general error: cannot open file" in low and "--version" in " ".join(probe_args):
+        return True
+    return False
+
+
+def _resolve_tool_path(candidates: list[str]) -> str | None:
+    for name in candidates:
+        path = shutil.which(name)
+        if path:
+            return path
+
+    # Support venv-only binaries even when shell PATH does not include .venv/bin.
+    python_bin = Path(sys.executable).resolve().parent
+    for name in candidates:
+        local_bin = python_bin / name
+        if local_bin.is_file() and os.access(local_bin, os.X_OK):
+            return str(local_bin)
+    return None
+
+
+def _probe_tool_version(path: str, version_checks: list[list[str]]) -> str | None:
+    for args in version_checks:
         try:
-            p = subprocess.run([path, *version_args], capture_output=True, text=True, timeout=2)
-            out = (p.stdout or p.stderr or "").strip().splitlines()
-            version = out[0] if out else None
+            p = subprocess.run([path, *args], capture_output=True, text=True, timeout=3)
+            merged = "\n".join(part for part in [(p.stdout or ""), (p.stderr or "")] if part).strip()
+            line = _first_non_empty_line(merged)
+            if _looks_like_invalid_probe(line, args):
+                continue
+            if line:
+                return line
         except Exception:
-            version = None
-    return {"name": name, "enabled": True, "path": path, "version": version, "category": category}
+            continue
+    return None
+
+
+def _tool_status(
+    name: str,
+    version_checks: list[list[str]] | None = None,
+    *,
+    aliases: list[str] | None = None,
+    category: str = "general",
+    python_module_fallback: str | None = None,
+    python_cmd_fallback: str | None = None,
+) -> dict:
+    candidates = [name] + [a for a in (aliases or []) if a and a != name]
+    path = _resolve_tool_path(candidates)
+    if path:
+        version = _probe_tool_version(path, version_checks or [])
+        return {"name": name, "enabled": True, "path": path, "version": version, "category": category}
+
+    if python_module_fallback:
+        try:
+            if importlib.util.find_spec(python_module_fallback) is not None:
+                return {
+                    "name": name,
+                    "enabled": True,
+                    "path": python_cmd_fallback or f"python -m {python_module_fallback}",
+                    "version": f"python:{python_module_fallback}",
+                    "category": category,
+                }
+        except Exception:
+            pass
+
+    return {"name": name, "enabled": False, "path": None, "version": None, "category": category}
 
 
 def _python_module_status(import_name: str, display_name: str | None = None, *, category: str = "python") -> dict:
@@ -126,25 +192,39 @@ def _python_module_status(import_name: str, display_name: str | None = None, *, 
 
 def _all_tool_statuses() -> list[dict]:
     return [
-        _tool_status("file", ["--version"], category="filesystem"),
-        _tool_status("strings", ["--version"], category="filesystem"),
-        _tool_status("sha256sum", ["--version"], category="integrity"),
-        _tool_status("md5sum", ["--version"], category="integrity"),
-        _tool_status("xxd", ["-h"], category="filesystem"),
-        _tool_status("exiftool", ["-ver"], category="artifact"),
-        _tool_status("jq", ["--version"], category="analysis"),
-        _tool_status("rg", ["--version"], category="analysis"),
-        _tool_status("yara", ["--version"], category="threat"),
-        _tool_status("tshark", ["--version"], category="network"),
-        _tool_status("tcpdump", ["--version"], category="network"),
-        _tool_status("zeek", ["--version"], category="network"),
-        _tool_status("suricata", ["--build-info"], category="network"),
-        _tool_status("foremost", ["-V"], category="carving"),
-        _tool_status("bulk_extractor", ["-h"], category="carving"),
-        _tool_status("binwalk", ["--version"], category="carving"),
-        _tool_status("ssdeep", ["-V"], category="integrity"),
-        _tool_status("vol", ["--help"], category="memory"),
-        _tool_status("volatility3", ["--help"], category="memory"),
+        _tool_status("file", [["--version"]], category="filesystem"),
+        _tool_status("strings", [["--version"]], category="filesystem"),
+        _tool_status("sha256sum", [["--version"]], category="integrity"),
+        _tool_status("md5sum", [["--version"]], category="integrity"),
+        _tool_status("xxd", [["-h"]], category="filesystem"),
+        _tool_status("exiftool", [["-ver"]], category="artifact"),
+        _tool_status("jq", [["--version"]], category="analysis"),
+        _tool_status("rg", [["--version"]], category="analysis"),
+        _tool_status("yara", [["--version"]], category="threat"),
+        _tool_status("tshark", [["--version"]], category="network"),
+        _tool_status("tcpdump", [["--version"]], category="network"),
+        _tool_status("zeek", [["--version"], ["-v"]], aliases=["bro"], category="network"),
+        _tool_status("suricata", [["--build-info"], ["-V"]], category="network"),
+        _tool_status("foremost", [["-V"]], category="carving"),
+        _tool_status("bulk_extractor", [["-h"]], category="carving"),
+        _tool_status("binwalk", [["-h"], ["--help"], ["-V"]], category="carving"),
+        _tool_status("ssdeep", [["-V"]], category="integrity"),
+        _tool_status(
+            "vol",
+            [["--help"]],
+            aliases=["volatility3", "vol.py"],
+            category="memory",
+            python_module_fallback="volatility3",
+            python_cmd_fallback="python -m volatility3.cli",
+        ),
+        _tool_status(
+            "volatility3",
+            [["--help"]],
+            aliases=["vol", "vol.py"],
+            category="memory",
+            python_module_fallback="volatility3",
+            python_cmd_fallback="python -m volatility3.cli",
+        ),
         _python_module_status("Evtx.Evtx", "python:Evtx.Evtx", category="python"),
         _python_module_status("Registry", "python:Registry", category="python"),
         _python_module_status("yara", "python:yara", category="python"),
@@ -280,14 +360,14 @@ async def web_admin(request: Request):
 
 def _osint_tool_statuses() -> list[dict[str, Any]]:
     return [
-        _tool_status("whois", ["--version"], category="osint"),
-        _tool_status("dig", ["-v"], category="dns"),
-        _tool_status("host", ["-V"], category="dns"),
+        _tool_status("whois", [["--version"], ["-v"]], category="osint"),
+        _tool_status("dig", [["-v"]], category="dns"),
+        _tool_status("host", [["-V"]], category="dns"),
         _tool_status("nslookup", [], category="dns"),
-        _tool_status("curl", ["--version"], category="http"),
-        _tool_status("wget", ["--version"], category="http"),
-        _tool_status("tor", ["--version"], category="privacy"),
-        _tool_status("python3", ["--version"], category="runtime"),
+        _tool_status("curl", [["--version"]], category="http"),
+        _tool_status("wget", [["--version"]], category="http"),
+        _tool_status("tor", [["--version"]], category="privacy"),
+        _tool_status("python3", [["--version"]], category="runtime"),
         _python_module_status("dns", "python:dns", category="python"),
         _python_module_status("requests", "python:requests", category="python"),
         _python_module_status("aiohttp", "python:aiohttp", category="python"),

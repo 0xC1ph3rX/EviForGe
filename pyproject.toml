@@ -26,6 +26,9 @@ dependencies = [
 	"python-registry>=1.3.1",
 	"yara-python>=4.3.1",
 	"pyshark>=0.6",
+	"scapy>=2.6",
+	"pandas>=2.2",
+	"volatility3>=2.10",
 ]
 
 [project.optional-dependencies]
