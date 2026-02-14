@@ -68,7 +68,7 @@
                 <div class="hacker-label">Navigation Console</div>
                 <h3>Command Palette</h3>
             </div>
-            <button type="button" class="btn btn-sm btn-outline" id="closeCommandPalette">Close</button>
+            <button type="button" class="btn btn-sm btn-outline" id="closeCommandPalette" data-close-overlay="palette">Close</button>
         </div>
         <input id="commandSearch" type="search" autocomplete="off" placeholder="Type a command: dashboard, osint, new case, theme..." />
         <div id="commandResults" class="command-results"></div>
@@ -187,6 +187,12 @@
                     action: () => window.dispatchEvent(new CustomEvent('eviforge:new-case')),
                 },
                 {
+                    label: 'Export System Snapshot',
+                    keywords: 'snapshot export json report',
+                    shortcut: 'Alt+S',
+                    action: () => window.dispatchEvent(new CustomEvent('eviforge:export-snapshot')),
+                },
+                {
                     label: 'Toggle Theme',
                     keywords: 'dark light appearance',
                     action: () => toggleTheme(),
@@ -255,6 +261,11 @@
             setTimeout(() => input.focus(), 10);
         }
 
+        function isCommandPaletteOpen() {
+            const panel = document.getElementById('commandPalette');
+            return !!panel && !panel.hidden;
+        }
+
         function closeCommandPalette() {
             const panel = document.getElementById('commandPalette');
             const backdrop = document.getElementById('commandPaletteBackdrop');
@@ -271,6 +282,10 @@
         document.getElementById('commandPaletteBackdrop')?.addEventListener('click', closeCommandPalette);
         document.getElementById('commandSearch')?.addEventListener('input', (e) => {
             renderCommandResults(e.target.value || '');
+        });
+        document.addEventListener('click', (event) => {
+            const closeTarget = event.target.closest('[data-close-overlay="palette"]');
+            if (closeTarget) closeCommandPalette();
         });
 
         document.getElementById('logoutBtn')?.addEventListener('click', async () => {
@@ -290,13 +305,26 @@
                 closeCommandPalette();
                 return;
             }
+            if (event.altKey && event.key.toLowerCase() === 's') {
+                event.preventDefault();
+                window.dispatchEvent(new CustomEvent('eviforge:export-snapshot'));
+                return;
+            }
             if (event.altKey && event.key === '1') window.location.href = '/web';
             if (event.altKey && event.key === '2') window.location.href = '/web/osint';
             if (event.altKey && event.key === '3') window.location.href = '/web/admin';
         });
 
+        window.addEventListener('resize', () => {
+            if (!isCommandPaletteOpen()) return;
+            // Re-open to recalc desktop/mobile dock behavior.
+            closeCommandPalette();
+            openCommandPalette();
+        });
+
         window.showToast = showToast;
         window.openCommandPalette = openCommandPalette;
+        window.closeCommandPalette = closeCommandPalette;
 
         initTheme();
         refreshAuthUI();

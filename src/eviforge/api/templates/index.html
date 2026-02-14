@@ -3,64 +3,108 @@
 {% block title %}Dashboard - EviForge{% endblock %}
 
 {% block content %}
-<div class="layout-grid" style="min-height:auto; display:block;">
-    <div class="flex between mb-4">
-        <h2>Dashboard</h2>
-        <button onclick="document.getElementById('createCaseModal').style.display='block'" class="btn btn-primary">
-            + New Case
-        </button>
-    </div>
+<div class="dashboard-shell">
+    <section class="card dashboard-hero">
+        <div class="dashboard-hero-grid">
+            <div>
+                <div class="hacker-label">Incident Command Hub</div>
+                <h2 class="mt-1">Case Operations Dashboard</h2>
+                <p class="text-muted mt-1">
+                    Rapid triage, case orchestration, and evidence workflows from one local-first control surface.
+                </p>
+                <div class="hero-actions mt-2">
+                    <button id="openCreateCaseBtn" type="button" class="btn btn-primary">+ New Case</button>
+                    <button id="refreshDashboardBtn" type="button" class="btn btn-outline">Refresh Data</button>
+                    <button id="exportSnapshotBtn" type="button" class="btn btn-outline">Export Snapshot</button>
+                    <button id="toggleHeroTerminalBtn" type="button" class="btn btn-outline">Hide Terminal</button>
+                    <button type="button" class="btn btn-outline" onclick="openCommandPalette()">Command Palette</button>
+                </div>
+                <div class="shortcut-row mt-2">
+                    <span class="shortcut-pill">Ctrl+N: New Case</span>
+                    <span class="shortcut-pill">Ctrl/Cmd+K: Commands</span>
+                    <span class="shortcut-pill">Alt+1/2/3: Navigate</span>
+                </div>
+            </div>
+            <div id="heroTerminalPanel" class="dashboard-hero-terminal" aria-hidden="true">
+                <div class="terminal-header">
+                    <span>node://eviforge.local :: monitor</span>
+                    <button id="closeHeroTerminalBtn" type="button" class="btn btn-sm btn-outline">Close</button>
+                </div>
+                <pre id="heroTerminal">Initializing telemetry stream...</pre>
+            </div>
+        </div>
+    </section>
 
-    <!-- Quick Stats -->
-    <div
-        style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
-        <div class="card" style="text-align:center;">
-            <div class="text-muted text-sm uppercase">Active Cases</div>
+    <section class="dashboard-stats-grid">
+        <article class="card stat-card">
+            <div class="hacker-label">Cases</div>
             <div class="text-xl font-bold mt-1" id="statsCases">-</div>
-        </div>
-        <div class="card" style="text-align:center;">
-            <div class="text-muted text-sm uppercase">Jobs Running</div>
+            <div class="text-muted text-sm mt-1">Active investigations in workspace.</div>
+        </article>
+        <article class="card stat-card">
+            <div class="hacker-label">Jobs Running</div>
             <div class="text-xl font-bold mt-1" id="statsJobs">-</div>
-        </div>
-        <div class="card" style="text-align:center;">
-            <div class="text-muted text-sm uppercase">Evidence items</div>
+            <div class="text-muted text-sm mt-1">Modules currently pending or running.</div>
+        </article>
+        <article class="card stat-card">
+            <div class="hacker-label">Evidence Items</div>
             <div class="text-xl font-bold mt-1" id="statsEvidence">-</div>
-        </div>
-    </div>
+            <div class="text-muted text-sm mt-1">Files ingested and tracked for custody.</div>
+        </article>
+        <article class="card stat-card">
+            <div class="hacker-label">Last Sync</div>
+            <div class="text-xl font-bold mt-1 text-mono" id="statsLastSync">--:--:--</div>
+            <div class="text-muted text-sm mt-1">UTC snapshot from API endpoints.</div>
+        </article>
+    </section>
 
-    <!-- Cases List -->
-    <div class="card">
-        <h3>Recent Cases</h3>
-        <table id="casesTable">
-            <thead>
-                <tr>
-                    <th>Case Name</th>
-                    <th>ID</th>
-                    <th>Created</th>
-                    <th>Action</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td colspan="4" class="text-muted text-center">Loading cases...</td>
-                </tr>
-            </tbody>
-        </table>
-    </div>
+    <section class="card">
+        <div class="dashboard-table-head">
+            <div>
+                <h3>Recent Cases</h3>
+                <div class="text-muted text-sm mt-1" id="casesStatus">Loading cases and statistics...</div>
+            </div>
+            <div class="dashboard-filters">
+                <input id="caseSearchInput" type="search" placeholder="Search by case name or ID..." />
+                <select id="caseSortSelect">
+                    <option value="newest" selected>Sort: Newest</option>
+                    <option value="oldest">Sort: Oldest</option>
+                    <option value="name">Sort: Name A-Z</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="table-shell mt-2">
+            <table id="casesTable">
+                <thead>
+                    <tr>
+                        <th>Case Name</th>
+                        <th>ID</th>
+                        <th>Created</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td colspan="4" class="text-muted text-center">Loading cases...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
 </div>
 
-<!-- Simple Modal for Create Case -->
-<div id="createCaseModal"
-    style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5);">
-    <div class="card" style="max-width:400px; margin: 10% auto; position:relative;">
-        <h3>Create New Case</h3>
+<div id="createCaseModal" class="modal-backdrop" hidden>
+    <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="createCaseTitle">
+        <div class="flex between">
+            <h3 id="createCaseTitle">Create New Case</h3>
+            <button type="button" class="btn btn-sm btn-outline" id="closeCaseModalBtn" data-close-overlay="create-case">Close</button>
+        </div>
+        <p class="text-muted text-sm mt-1">Use a descriptive case name to keep evidence and module output searchable.</p>
         <form id="createCaseForm" class="mt-2">
-            <input type="text" id="caseName" placeholder="Case Name (e.g. Operation-X)" required
-                style="width:100%; box-sizing:border-box;">
+            <input type="text" id="caseName" placeholder="Case Name (e.g. Credential Theft - 2026-02-14)" required style="width:100%; box-sizing:border-box;">
             <div class="flex mt-2" style="justify-content:flex-end;">
-                <button type="button" class="btn btn-outline"
-                    onclick="document.getElementById('createCaseModal').style.display='none'">Cancel</button>
-                <button type="submit" class="btn btn-primary">Create</button>
+                <button type="submit" class="btn btn-primary">Create Case</button>
             </div>
         </form>
     </div>
@@ -69,57 +113,297 @@
 
 {% block scripts %}
 <script>
-    async function loadDashboard() {
-        const statsRes = await apiFetch('/api/cases/stats/overview');
-        if (statsRes.ok) {
-            const stats = await statsRes.json();
-            document.getElementById('statsCases').innerText = stats.cases;
-            document.getElementById('statsJobs').innerText = stats.jobs_running;
-            document.getElementById('statsEvidence').innerText = stats.evidence;
-        } else {
-            document.getElementById('statsCases').innerText = "-";
-            document.getElementById('statsJobs').innerText = "-";
-            document.getElementById('statsEvidence').innerText = "-";
+    const dashboardState = {
+        cases: [],
+    };
+    const HERO_TERMINAL_PREF_KEY = 'eviforge_hide_hero_terminal';
+
+    function esc(value) {
+        return String(value ?? '').replace(/[&<>"']/g, (ch) => ({
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#39;'
+        }[ch]));
+    }
+
+    function fmtDate(ts) {
+        if (!ts) return '-';
+        try {
+            return new Date(ts).toLocaleString();
+        } catch (_) {
+            return String(ts);
         }
+    }
 
-        const res = await apiFetch('/api/cases');
-        if (!res.ok) return;
-        const cases = await res.json();
+    function setCasesStatus(msg, isError = false) {
+        const el = document.getElementById('casesStatus');
+        if (!el) return;
+        el.textContent = msg;
+        el.className = isError ? 'text-danger text-sm mt-1' : 'text-muted text-sm mt-1';
+    }
 
-        // Render Table
+    function updateSyncClock() {
+        const el = document.getElementById('statsLastSync');
+        if (!el) return;
+        el.textContent = new Date().toISOString().slice(11, 19);
+    }
+
+    function animateHeroTerminal() {
+        const el = document.getElementById('heroTerminal');
+        if (!el) return;
+        const lines = [
+            '[+] Local vault integrity: PASS',
+            '[+] Chain of custody verifier: ACTIVE',
+            '[+] Job execution mode: AUTO',
+            '[+] API status: READY',
+            '[+] Awaiting operator command...',
+        ];
+        let idx = 0;
+        el.textContent = '';
+        const timer = setInterval(() => {
+            if (idx >= lines.length) {
+                clearInterval(timer);
+                return;
+            }
+            el.textContent += `${lines[idx]}\n`;
+            idx += 1;
+        }, 140);
+    }
+
+    function setHeroTerminalVisible(visible) {
+        const panel = document.getElementById('heroTerminalPanel');
+        const toggle = document.getElementById('toggleHeroTerminalBtn');
+        if (!panel || !toggle) return;
+        panel.hidden = !visible;
+        toggle.textContent = visible ? 'Hide Terminal' : 'Show Terminal';
+        try {
+            localStorage.setItem(HERO_TERMINAL_PREF_KEY, visible ? '0' : '1');
+        } catch (_) {
+            // best-effort only
+        }
+    }
+
+    function applyHeroTerminalPreference() {
+        let hidden = false;
+        try {
+            hidden = localStorage.getItem(HERO_TERMINAL_PREF_KEY) === '1';
+        } catch (_) {
+            hidden = false;
+        }
+        setHeroTerminalVisible(!hidden);
+    }
+
+    function getFilteredCases() {
+        const query = (document.getElementById('caseSearchInput')?.value || '').trim().toLowerCase();
+        const sort = document.getElementById('caseSortSelect')?.value || 'newest';
+        const rows = dashboardState.cases.slice().filter((item) => {
+            const text = `${item.name || ''} ${item.id || ''}`.toLowerCase();
+            return !query || text.includes(query);
+        });
+
+        rows.sort((a, b) => {
+            if (sort === 'name') return String(a.name || '').localeCompare(String(b.name || ''));
+            const at = Date.parse(a.created_at || '') || 0;
+            const bt = Date.parse(b.created_at || '') || 0;
+            return sort === 'oldest' ? at - bt : bt - at;
+        });
+        return rows;
+    }
+
+    function renderCasesTable() {
         const tbody = document.querySelector('#casesTable tbody');
-        if (cases.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">No cases found. Create one to get started.</td></tr>';
+        if (!tbody) return;
+        const cases = getFilteredCases();
+
+        if (!cases.length) {
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">No cases match the current filter.</td></tr>';
             return;
         }
 
-        tbody.innerHTML = cases.map(c => `
+        tbody.innerHTML = cases.map((c) => `
             <tr>
-                <td style="font-weight:600; color:var(--secondary);">${c.name}</td>
-                <td class="text-mono text-sm text-muted">${c.id.substring(0, 8)}...</td>
-                <td class="text-sm">${new Date(c.created_at).toLocaleDateString()}</td>
-                <td><a href="/web/cases/${c.id}" class="btn btn-sm btn-primary">Open Case</a></td>
+                <td><strong>${esc(c.name)}</strong></td>
+                <td class="text-mono text-sm">${esc(String(c.id).slice(0, 8))}...</td>
+                <td>${esc(fmtDate(c.created_at))}</td>
+                <td>
+                    <div class="table-actions">
+                        <a href="/web/cases/${encodeURIComponent(c.id)}" class="btn btn-sm btn-primary">Open</a>
+                        <button type="button" class="btn btn-sm btn-outline" data-copy-case-id="${esc(c.id)}">Copy ID</button>
+                    </div>
+                </td>
             </tr>
         `).join('');
     }
 
-    document.getElementById('createCaseForm').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const name = document.getElementById('caseName').value;
-        const res = await apiFetch('/api/cases', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name })
-        });
-        if (res.ok) {
-            document.getElementById('caseName').value = '';
-            document.getElementById('createCaseModal').style.display = 'none';
-            loadDashboard();
-        } else {
-            alert('Failed to create case');
+    async function loadDashboard() {
+        setCasesStatus('Syncing with API...');
+        try {
+            const [statsRes, casesRes] = await Promise.all([
+                apiFetch('/api/cases/stats/overview'),
+                apiFetch('/api/cases'),
+            ]);
+
+            if (statsRes.ok) {
+                const stats = await statsRes.json();
+                document.getElementById('statsCases').textContent = String(stats.cases ?? 0);
+                document.getElementById('statsJobs').textContent = String(stats.jobs_running ?? 0);
+                document.getElementById('statsEvidence').textContent = String(stats.evidence ?? 0);
+            }
+
+            if (!casesRes.ok) {
+                setCasesStatus(`Failed to load cases (${casesRes.status}).`, true);
+                return;
+            }
+            dashboardState.cases = await casesRes.json();
+            renderCasesTable();
+            setCasesStatus(`Loaded ${dashboardState.cases.length} case(s).`);
+            updateSyncClock();
+        } catch (error) {
+            setCasesStatus(`Failed to load dashboard: ${error}`, true);
+        }
+    }
+
+    function openCreateCaseModal() {
+        const modal = document.getElementById('createCaseModal');
+        const input = document.getElementById('caseName');
+        if (!modal) return;
+        modal.hidden = false;
+        modal.setAttribute('aria-hidden', 'false');
+        setTimeout(() => input?.focus(), 10);
+    }
+
+    function isCreateCaseModalOpen() {
+        const modal = document.getElementById('createCaseModal');
+        return !!modal && !modal.hidden;
+    }
+
+    function closeCreateCaseModal() {
+        const modal = document.getElementById('createCaseModal');
+        if (!modal) return;
+        modal.hidden = true;
+        modal.setAttribute('aria-hidden', 'true');
+    }
+
+    async function exportSystemSnapshot() {
+        setCasesStatus('Building system snapshot...');
+        const snapshot = {
+            generated_at: new Date().toISOString(),
+            context: 'dashboard',
+            stats: null,
+            cases: [],
+            osint: null,
+            admin: null,
+        };
+
+        try {
+            const [statsRes, casesRes, osintRes, adminRes] = await Promise.all([
+                apiFetch('/api/cases/stats/overview'),
+                apiFetch('/api/cases'),
+                apiFetch('/web/osint/tools-data'),
+                apiFetch('/web/admin/tools-data'),
+            ]);
+
+            if (statsRes.ok) snapshot.stats = await statsRes.json();
+            if (casesRes.ok) snapshot.cases = await casesRes.json();
+            if (osintRes.ok) snapshot.osint = await osintRes.json();
+            if (adminRes.ok) snapshot.admin = await adminRes.json();
+
+            const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' });
+            const href = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = href;
+            link.download = `eviforge-snapshot-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(href);
+            showToast('System snapshot exported', 'success');
+            setCasesStatus(`Snapshot exported (${snapshot.cases.length} case(s)).`);
+        } catch (error) {
+            setCasesStatus(`Snapshot export failed: ${error}`, true);
+            showToast('Snapshot export failed', 'danger');
+        }
+    }
+
+    async function copyCaseId(id) {
+        try {
+            await navigator.clipboard.writeText(id);
+            showToast(`Case ID copied: ${id.slice(0, 8)}...`, 'success');
+        } catch (_) {
+            showToast('Copy failed in this browser/session', 'danger');
+        }
+    }
+
+    document.getElementById('casesTable')?.addEventListener('click', (event) => {
+        const target = event.target.closest('[data-copy-case-id]');
+        if (!target) return;
+        const value = target.getAttribute('data-copy-case-id');
+        if (value) copyCaseId(value);
+    });
+
+    document.getElementById('createCaseForm')?.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const nameInput = document.getElementById('caseName');
+        const createButton = event.target.querySelector('button[type="submit"]');
+        const name = nameInput?.value?.trim();
+        if (!name) return;
+
+        if (createButton) createButton.disabled = true;
+        try {
+            const res = await apiFetch('/api/cases', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name }),
+            });
+            if (!res.ok) {
+                showToast('Failed to create case', 'danger');
+                return;
+            }
+            if (nameInput) nameInput.value = '';
+            closeCreateCaseModal();
+            showToast('Case created successfully', 'success');
+            await loadDashboard();
+        } finally {
+            if (createButton) createButton.disabled = false;
         }
     });
 
+    document.getElementById('openCreateCaseBtn')?.addEventListener('click', openCreateCaseModal);
+    document.getElementById('exportSnapshotBtn')?.addEventListener('click', exportSystemSnapshot);
+    document.getElementById('toggleHeroTerminalBtn')?.addEventListener('click', () => {
+        const panel = document.getElementById('heroTerminalPanel');
+        setHeroTerminalVisible(!!panel?.hidden);
+    });
+    document.getElementById('closeHeroTerminalBtn')?.addEventListener('click', () => setHeroTerminalVisible(false));
+    document.getElementById('closeCaseModalBtn')?.addEventListener('click', closeCreateCaseModal);
+    document.getElementById('refreshDashboardBtn')?.addEventListener('click', loadDashboard);
+    document.getElementById('caseSearchInput')?.addEventListener('input', renderCasesTable);
+    document.getElementById('caseSortSelect')?.addEventListener('change', renderCasesTable);
+    document.getElementById('createCaseModal')?.addEventListener('click', (event) => {
+        if (event.target.id === 'createCaseModal') closeCreateCaseModal();
+    });
+    document.addEventListener('click', (event) => {
+        const closeTarget = event.target.closest('[data-close-overlay="create-case"]');
+        if (closeTarget) closeCreateCaseModal();
+    });
+    window.addEventListener('eviforge:new-case', openCreateCaseModal);
+    window.addEventListener('eviforge:export-snapshot', exportSystemSnapshot);
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && isCreateCaseModalOpen()) {
+            event.preventDefault();
+            closeCreateCaseModal();
+            return;
+        }
+        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'n') {
+            event.preventDefault();
+            openCreateCaseModal();
+        }
+    });
+
+    applyHeroTerminalPreference();
+    animateHeroTerminal();
     loadDashboard();
 </script>
 {% endblock %}

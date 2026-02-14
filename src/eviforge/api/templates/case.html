@@ -77,6 +77,7 @@
                     </select>
                     <input type="text" id="jobParams" placeholder='Params JSON (optional)' style="min-width:220px;">
                     <button id="runJobBtn" onclick="runJob()" class="btn btn-primary" type="button">Run Module</button>
+                    <button id="runPipelineBtn" onclick="runCorePipeline()" class="btn btn-outline" type="button">Run Core Pipeline</button>
                     <button id="refreshModulesBtn" onclick="loadModuleCatalog()" class="btn btn-outline" type="button">Refresh Modules</button>
                 </div>
             </div>
@@ -561,6 +562,22 @@
         setJobRunStatus(`Loaded ${CASE_JOBS.length} jobs.`);
     }
 
+    async function submitModuleJob(moduleName, evidenceId, params = {}) {
+        const res = await apiFetch(`/api/cases/${CASE_ID}/jobs`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ module: moduleName, evidence_id: evidenceId || null, params })
+        });
+        if (!res.ok) {
+            return {
+                ok: false,
+                status: res.status,
+                error: await responseErrorText(res),
+            };
+        }
+        const data = await res.json();
+        return { ok: true, data };
+    }
+
     async function runJob() {
         const module = document.getElementById('moduleSelect').value;
         const evidenceId = document.getElementById('targetEvidenceId').value;
@@ -587,18 +604,57 @@
         if (runBtn) runBtn.disabled = true;
         setJobRunStatus(`Submitting module ${module}...`);
 
-        const res = await apiFetch(`/api/cases/${CASE_ID}/jobs`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ module, evidence_id: evidenceId || null, params })
-        });
+        const result = await submitModuleJob(module, evidenceId || null, params);
         if (runBtn) runBtn.disabled = false;
-        if (res.ok) {
-            const data = await res.json();
+        if (result.ok) {
+            const data = result.data;
             setJobRunStatus(`Module ${module} queued as job ${String(data.id || '').substring(0, 8)}.`);
             loadJobs();
             switchTab('jobs');
         } else {
-            setJobRunStatus(`Run failed (${res.status}): ${await responseErrorText(res)}`, true);
+            setJobRunStatus(`Run failed (${result.status}): ${result.error}`, true);
+        }
+    }
+
+    async function runCorePipeline() {
+        const runBtn = document.getElementById('runJobBtn');
+        const pipelineBtn = document.getElementById('runPipelineBtn');
+        const evidenceId = document.getElementById('targetEvidenceId').value;
+        const availableNames = new Set((MODULE_CATALOG || []).filter((m) => !!m.available).map((m) => String(m.name)));
+        const pipelineOrder = ['inventory', 'verify', 'strings', 'timeline', 'triage', 'yara', 'pcap', 'report'];
+        const selectedModules = pipelineOrder.filter((name) => availableNames.has(name));
+
+        if (!selectedModules.length) {
+            setJobRunStatus('No core modules are available in this runtime.', true);
+            return;
+        }
+        const needsEvidence = selectedModules.some((name) => moduleRequiresEvidence(name));
+        if (needsEvidence && !evidenceId) {
+            setJobRunStatus('Core pipeline requires evidence. Select evidence first.', true);
+            return;
+        }
+
+        if (runBtn) runBtn.disabled = true;
+        if (pipelineBtn) pipelineBtn.disabled = true;
+
+        let okCount = 0;
+        let failCount = 0;
+        for (let idx = 0; idx < selectedModules.length; idx += 1) {
+            const name = selectedModules[idx];
+            setJobRunStatus(`Core pipeline: ${name} (${idx + 1}/${selectedModules.length})...`);
+            const result = await submitModuleJob(name, moduleRequiresEvidence(name) ? evidenceId : null, {});
+            if (result.ok) okCount += 1;
+            else failCount += 1;
+        }
+
+        if (runBtn) runBtn.disabled = false;
+        if (pipelineBtn) pipelineBtn.disabled = false;
+
+        await loadJobs();
+        if (failCount > 0) {
+            setJobRunStatus(`Core pipeline finished with errors. Success: ${okCount}, Failed: ${failCount}.`, true);
+        } else {
+            setJobRunStatus(`Core pipeline queued successfully (${okCount} modules).`);
         }
     }
 

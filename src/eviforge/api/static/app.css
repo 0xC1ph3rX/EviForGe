@@ -1280,6 +1280,10 @@ tr:last-child td {
 }
 
 .terminal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
     font-family: var(--font-mono);
     font-size: 0.75rem;
     text-transform: uppercase;

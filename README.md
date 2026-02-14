@@ -113,8 +113,13 @@ Desktop workflow:
 3. Select cases/evidence/modules/jobs from the searchable sidebar.
 4. Run modules from the Module Runner drawer (`Run Selected` with per-module progress).
    - Use `Run All Loaded` in Admin -> Module Orchestrator to queue every available module for the selected case.
+5. On Case Details -> Jobs tab, use `Run Core Pipeline` to queue a recommended baseline sequence (`inventory`, `verify`, `strings`, `timeline`, `triage`, `yara`, `pcap`, `report`) for fast triage.
 5. Inspect rows in the center sortable table and analyze details on the right tabs (`Decoded`, `Raw`, `Metadata`).
 6. Export filtered rows to JSON/CSV from the toolbar.
+
+Web dashboard extras:
+- `Export Snapshot` creates a local JSON report of current cases/stats/tools/services.
+- Hero terminal panel can be closed/reopened (button now works and preference is remembered).
 
 Desktop defaults are saved in `EVIFORGE_DATA_DIR/desktop_profiles.json`.
 
