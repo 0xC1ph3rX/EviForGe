@@ -1,5 +1,6 @@
 import os
 import re
+import secrets
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
@@ -79,6 +80,23 @@ def _setup_enabled() -> bool:
     return os.getenv("EVIFORGE_SETUP_ENABLED", "0") == "1"
 
 
+def _setup_token() -> str | None:
+    token = os.getenv("EVIFORGE_SETUP_TOKEN", "").strip()
+    return token or None
+
+
+def _bootstrap_hint(*, remote_bootstrap_enabled: bool) -> str:
+    if remote_bootstrap_enabled:
+        return (
+            "Set EVIFORGE_ADMIN_PASSWORD and restart/redeploy, or open /web/setup "
+            "and complete first-run setup with EVIFORGE_SETUP_TOKEN."
+        )
+    return (
+        "Set EVIFORGE_ADMIN_PASSWORD and restart/redeploy, or configure "
+        "EVIFORGE_SETUP_TOKEN for secure first-run setup at /web/setup."
+    )
+
+
 class AckRequest(BaseModel):
     text: str
     actor: str = "local"
@@ -86,10 +104,12 @@ class AckRequest(BaseModel):
 class BootstrapRequest(BaseModel):
     username: str = "admin"
     password: str
+    setup_token: str | None = None
 
 
 @router.get("/bootstrap/status")
 def bootstrap_status(request: Request):
+    remote_bootstrap_enabled = _setup_token() is not None
     settings = load_settings()
     SessionLocal = create_session_factory(settings.database_url)
     with SessionLocal() as session:
@@ -97,20 +117,46 @@ def bootstrap_status(request: Request):
     return {
         "setup_required": count == 0,
         "setup_enabled": _setup_enabled(),
-        "hint": "Set EVIFORGE_ADMIN_PASSWORD and restart, or use /web/setup (dev) to create the first admin user.",
+        "remote_bootstrap_enabled": remote_bootstrap_enabled,
+        "setup_token_required": remote_bootstrap_enabled and not _setup_enabled(),
+        "hint": _bootstrap_hint(remote_bootstrap_enabled=remote_bootstrap_enabled),
     }
 
 
 @router.post("/bootstrap")
 def bootstrap_admin(request: Request, req: BootstrapRequest):
     """
-    Create the first admin user (dev convenience).
+    Create the first admin user.
 
-    Safety: only enabled when EVIFORGE_SETUP_ENABLED=1.
-    Production guidance: set EVIFORGE_ADMIN_PASSWORD and EVIFORGE_SECRET_KEY in .env and restart.
+    Allowed modes:
+      - local/dev convenience: EVIFORGE_SETUP_ENABLED=1
+      - secure remote setup: EVIFORGE_SETUP_TOKEN=<one-time secret>
+
+    Production-safe bootstrap via EVIFORGE_ADMIN_PASSWORD remains supported.
     """
-    if not _setup_enabled():
-        raise HTTPException(status_code=403, detail={"error": "setup_disabled", "hint": "Set EVIFORGE_SETUP_ENABLED=1 (dev only) or bootstrap via env vars."})
+    setup_enabled = _setup_enabled()
+    configured_setup_token = _setup_token()
+    token_bootstrap_enabled = configured_setup_token is not None
+
+    if not setup_enabled and not token_bootstrap_enabled:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "setup_disabled",
+                "hint": _bootstrap_hint(remote_bootstrap_enabled=False),
+            },
+        )
+
+    if token_bootstrap_enabled and not setup_enabled:
+        provided_token = (req.setup_token or "").strip()
+        if not provided_token or not secrets.compare_digest(provided_token, configured_setup_token):
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "error": "invalid_setup_token",
+                    "hint": "Provide the EVIFORGE_SETUP_TOKEN configured for this deployment.",
+                },
+            )
 
     username = req.username.strip() or "admin"
     if not USERNAME_RE.match(username):
@@ -182,11 +228,12 @@ async def login_for_access_token(
     
     with SessionLocal() as session:
         if session.query(User).count() == 0:
+            remote_bootstrap_enabled = _setup_token() is not None
             raise HTTPException(
                 status_code=503,
                 detail={
                     "error": "setup_required",
-                    "hint": "No users exist. Set EVIFORGE_ADMIN_PASSWORD and restart, or open /web/setup (dev) to create the first admin user.",
+                    "hint": _bootstrap_hint(remote_bootstrap_enabled=remote_bootstrap_enabled),
                 },
             )
 

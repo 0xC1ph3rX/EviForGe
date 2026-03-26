@@ -83,6 +83,7 @@ eviforge api
 - Default local credentials from `.env.example`: `admin / admin`
 - `.env` is loaded automatically on startup.
 - Existing `admin` users are auto-reconciled to admin role/password from env (`EVIFORGE_ENFORCE_ENV_ADMIN=1`, default).
+- If you prefer first-run setup from the browser, set `EVIFORGE_SETUP_ENABLED=1` for local dev or `EVIFORGE_SETUP_TOKEN=<long random token>` for a deployed instance, then open `/web/setup`.
 
 ## Repository Cleanup
 
@@ -131,6 +132,14 @@ cp .env.example .env
 sudo docker compose up -d --build
 ```
 
+Optional first-run web setup:
+```bash
+# keep EVIFORGE_SECRET_KEY set
+# set EVIFORGE_SETUP_TOKEN to a long random value
+sudo docker compose up -d --build
+```
+Then open `/web/setup`, enter the same setup token once, and create the first owner account.
+
 If you want strict queue mode in containers, keep:
 ```bash
 EVIFORGE_JOB_EXECUTION=queue
@@ -143,12 +152,14 @@ This repo now includes a Vercel-compatible FastAPI entrypoint at [`index.py`](./
 Recommended environment variables for Vercel:
 - `EVIFORGE_SECRET_KEY`
 - `EVIFORGE_ADMIN_PASSWORD`
+- `EVIFORGE_SETUP_TOKEN` (optional; enables secure first-run account creation from `/web/setup`)
 - `EVIFORGE_DATABASE_URL` (recommended for persistent storage; otherwise Vercel defaults to ephemeral SQLite under `/tmp/eviforge`)
 - `EVIFORGE_REDIS_URL` (optional; jobs default to inline execution on Vercel if not set)
 
 Deployment notes:
 - The web/API runtime installs from `requirements-vercel.txt`, not the full local DFIR dependency set.
 - Vercel uses `/tmp/eviforge` by default for writable runtime storage.
+- If you do not set `EVIFORGE_ADMIN_PASSWORD`, you can still initialize the first account by setting `EVIFORGE_SETUP_TOKEN`, redeploying, and completing `/web/setup`.
 - Heavy/local-only files are excluded from the serverless bundle via `vercel.json`.
 - Optional forensic integrations like YARA, EVTX, Registry parsing, `tshark`, and desktop UI are still intended for local/docker environments.
 

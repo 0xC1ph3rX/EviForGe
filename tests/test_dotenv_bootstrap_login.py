@@ -48,4 +48,4 @@ def test_dotenv_bootstraps_admin_login(tmp_path: Path, monkeypatch) -> None:
 
         r = client.get("/web/admin")
         assert r.status_code == 200
-        assert "System Administration" in r.text
+        assert "System Settings" in r.text

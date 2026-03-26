@@ -21,22 +21,26 @@
 
   <div class="layout-grid" style="grid-template-columns: 1fr 1fr; gap: 1.5rem; display:grid;">
     <div class="card">
-      <h3>Recommended (Docker)</h3>
+      <h3>Recommended (Environment Bootstrap)</h3>
       <div class="text-sm">
-        Set these in <code>.env</code>, then restart:
+        Set these in your environment, then restart or redeploy:
         <pre class="pre-block">EVIFORGE_ADMIN_PASSWORD=&lt;long passphrase&gt;
 EVIFORGE_SECRET_KEY=&lt;long random secret&gt;</pre>
         <div class="text-muted text-sm">
-          Then run: <code>sudo docker compose up -d --build</code>
+          Docker: <code>sudo docker compose up -d --build</code><br>
+          Vercel: update environment variables, then redeploy.
         </div>
       </div>
     </div>
 
     <div class="card">
-      <h3>Dev Convenience (UI Bootstrap)</h3>
+      <h3>Secure Web Setup</h3>
       <div class="text-muted text-sm">
-        This is disabled by default. Enable it only for local dev by setting:
-        <code>EVIFORGE_SETUP_ENABLED=1</code>
+        You can finish first-run setup from the browser in either of these modes:
+        <div class="mt-2">
+          <strong>Local dev:</strong> set <code>EVIFORGE_SETUP_ENABLED=1</code><br>
+          <strong>Deployed instance:</strong> set <code>EVIFORGE_SETUP_TOKEN</code> to a long random value, redeploy, then enter it below once.
+        </div>
       </div>
 
       <div id="bootstrapStatus" class="text-muted text-sm mt-2">Checking…</div>
@@ -45,8 +49,11 @@ EVIFORGE_SECRET_KEY=&lt;long random secret&gt;</pre>
         <div class="flex" style="flex-wrap:wrap; gap:0.5rem;">
           <input id="bootstrapUsername" placeholder="account username" value="admin" required>
           <input id="bootstrapPassword" type="password" placeholder="password (min 12 chars)" required>
-          <button class="btn btn-primary" type="submit">Create Account</button>
         </div>
+        <div id="setupTokenRow" class="mt-2" style="display:none;">
+          <input id="bootstrapSetupToken" type="password" placeholder="setup token" style="width:100%;">
+        </div>
+        <button class="btn btn-primary mt-2" type="submit">Create Account</button>
         <div id="bootstrapMsg" class="text-muted text-sm mt-2"></div>
       </form>
     </div>
@@ -59,6 +66,7 @@ EVIFORGE_SECRET_KEY=&lt;long random secret&gt;</pre>
   async function loadBootstrapStatus() {
     const el = document.getElementById('bootstrapStatus');
     const form = document.getElementById('bootstrapForm');
+    const tokenRow = document.getElementById('setupTokenRow');
     const res = await fetch('/api/auth/bootstrap/status');
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -70,12 +78,20 @@ EVIFORGE_SECRET_KEY=&lt;long random secret&gt;</pre>
       setTimeout(() => window.location.href = '/web/login', 700);
       return;
     }
-    if (!data.setup_enabled) {
-      el.innerHTML = 'Bootstrap disabled. Set <code>EVIFORGE_SETUP_ENABLED=1</code> and restart, or bootstrap via <code>.env</code>.';
+
+    if (!data.setup_enabled && !data.remote_bootstrap_enabled) {
+      el.innerHTML = 'Bootstrap is not enabled yet. Set <code>EVIFORGE_ADMIN_PASSWORD</code> and restart/redeploy, or configure <code>EVIFORGE_SETUP_TOKEN</code> for secure web setup.';
       form.style.display = 'none';
       return;
     }
-    el.textContent = 'Bootstrap enabled. Create the first workspace account below.';
+
+    if (data.setup_token_required) {
+      el.innerHTML = 'Secure web setup is enabled. Enter your deployment <code>EVIFORGE_SETUP_TOKEN</code> to create the first workspace account.';
+      tokenRow.style.display = 'block';
+    } else {
+      el.textContent = 'Bootstrap enabled. Create the first workspace account below.';
+      tokenRow.style.display = 'none';
+    }
     form.style.display = 'block';
   }
 
@@ -85,14 +101,23 @@ EVIFORGE_SECRET_KEY=&lt;long random secret&gt;</pre>
     msg.textContent = 'Creating…';
     const username = document.getElementById('bootstrapUsername').value;
     const password = document.getElementById('bootstrapPassword').value;
+    const setupToken = document.getElementById('bootstrapSetupToken')?.value || '';
     const res = await fetch('/api/auth/bootstrap', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password })
+      body: JSON.stringify({ username, password, setup_token: setupToken })
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      msg.textContent = (data && data.detail && (data.detail.hint || data.detail.error || data.detail)) ? JSON.stringify(data.detail) : 'Failed';
+      if (data && data.detail) {
+        if (typeof data.detail === 'string') {
+          msg.textContent = data.detail;
+        } else {
+          msg.textContent = data.detail.hint || data.detail.error || 'Failed';
+        }
+      } else {
+        msg.textContent = 'Failed';
+      }
       return;
     }
     msg.textContent = 'Account created. Redirecting to login…';
