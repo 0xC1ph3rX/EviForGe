@@ -18,6 +18,10 @@ class Settings:
     bind_port: int
 
 
+def _running_on_vercel() -> bool:
+    return os.getenv("VERCEL") == "1" or bool(os.getenv("VERCEL_ENV"))
+
+
 def _load_dotenv() -> None:
     """
     Lightweight `.env` loader for local/dev workflows.
@@ -53,7 +57,8 @@ def _load_dotenv() -> None:
 def load_settings() -> Settings:
     _load_dotenv()
 
-    data_dir = Path(os.getenv("EVIFORGE_DATA_DIR", "./.eviforge")).resolve()
+    default_data_dir = "/tmp/eviforge" if _running_on_vercel() else "./.eviforge"
+    data_dir = Path(os.getenv("EVIFORGE_DATA_DIR", default_data_dir)).resolve()
     vault_dir = Path(os.getenv("EVIFORGE_VAULT_DIR", str(data_dir / "vault"))).resolve()
     database_url = os.getenv("EVIFORGE_DATABASE_URL", f"sqlite:///{(data_dir / 'eviforge.db').as_posix()}")
     redis_url = os.getenv("EVIFORGE_REDIS_URL", "redis://redis:6379/0")

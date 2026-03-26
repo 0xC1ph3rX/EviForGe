@@ -136,6 +136,22 @@ If you want strict queue mode in containers, keep:
 EVIFORGE_JOB_EXECUTION=queue
 ```
 
+## Vercel Deployment
+
+This repo now includes a Vercel-compatible FastAPI entrypoint at [`index.py`](./index.py) and a Vercel-specific install path in [`vercel.json`](./vercel.json).
+
+Recommended environment variables for Vercel:
+- `EVIFORGE_SECRET_KEY`
+- `EVIFORGE_ADMIN_PASSWORD`
+- `EVIFORGE_DATABASE_URL` (recommended for persistent storage; otherwise Vercel defaults to ephemeral SQLite under `/tmp/eviforge`)
+- `EVIFORGE_REDIS_URL` (optional; jobs default to inline execution on Vercel if not set)
+
+Deployment notes:
+- The web/API runtime installs from `requirements-vercel.txt`, not the full local DFIR dependency set.
+- Vercel uses `/tmp/eviforge` by default for writable runtime storage.
+- Heavy/local-only files are excluded from the serverless bundle via `vercel.json`.
+- Optional forensic integrations like YARA, EVTX, Registry parsing, `tshark`, and desktop UI are still intended for local/docker environments.
+
 ## Environment Notes
 
 Common variables:

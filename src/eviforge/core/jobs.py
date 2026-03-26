@@ -19,9 +19,11 @@ logger = logging.getLogger(__name__)
 
 
 def _execution_mode() -> str:
-    mode = os.getenv("EVIFORGE_JOB_EXECUTION", "auto").strip().lower()
+    mode = os.getenv("EVIFORGE_JOB_EXECUTION", "").strip().lower()
     if mode in {"queue", "inline", "auto"}:
         return mode
+    if os.getenv("VERCEL") == "1" or os.getenv("VERCEL_ENV"):
+        return "inline"
     return "auto"
 
 
