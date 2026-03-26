@@ -7,52 +7,52 @@
     <section class="card dashboard-hero">
         <div class="dashboard-hero-grid">
             <div>
-                <div class="hacker-label">Incident Command Hub</div>
-                <h2 class="mt-1">Case Operations Dashboard</h2>
+                <div class="section-eyebrow">Workspace Overview</div>
+                <h2 class="mt-1">Case operations built for audit-ready forensic work.</h2>
                 <p class="text-muted mt-1">
-                    Rapid triage, case orchestration, and evidence workflows from one local-first control surface.
+                    Manage investigations, evidence inventories, and documented review workflows from a cleaner internal workspace designed for professional incident response and DFIR teams.
                 </p>
                 <div class="hero-actions mt-2">
-                    <button id="openCreateCaseBtn" type="button" class="btn btn-primary">+ New Case</button>
-                    <button id="refreshDashboardBtn" type="button" class="btn btn-outline">Refresh Data</button>
+                    <button id="openCreateCaseBtn" type="button" class="btn btn-primary">Create Case</button>
+                    <button id="refreshDashboardBtn" type="button" class="btn btn-outline">Refresh</button>
                     <button id="exportSnapshotBtn" type="button" class="btn btn-outline">Export Snapshot</button>
-                    <button id="toggleHeroTerminalBtn" type="button" class="btn btn-outline">Hide Terminal</button>
-                    <button type="button" class="btn btn-outline" onclick="openCommandPalette()">Command Palette</button>
-                </div>
-                <div class="shortcut-row mt-2">
-                    <span class="shortcut-pill">Ctrl+N: New Case</span>
-                    <span class="shortcut-pill">Ctrl/Cmd+K: Commands</span>
-                    <span class="shortcut-pill">Alt+1/2/3: Navigate</span>
                 </div>
             </div>
-            <div id="heroTerminalPanel" class="dashboard-hero-terminal" aria-hidden="true">
-                <div class="terminal-header">
-                    <span>node://eviforge.local :: monitor</span>
-                    <button id="closeHeroTerminalBtn" type="button" class="btn btn-sm btn-outline">Close</button>
+            <div class="dashboard-hero-summary">
+                <div class="summary-item">
+                    <div class="summary-title">Chain of custody</div>
+                    <div class="summary-copy">Case activity, evidence handling, and workflow outputs remain documented and reviewable.</div>
                 </div>
-                <pre id="heroTerminal">Initializing telemetry stream...</pre>
+                <div class="summary-item">
+                    <div class="summary-title">Local-first runtime</div>
+                    <div class="summary-copy">The interface is optimized for controlled environments without exposing operational data publicly.</div>
+                </div>
+                <div class="summary-item">
+                    <div class="summary-title">Operational clarity</div>
+                    <div class="summary-copy">Focused summaries, searchable case listings, and structured exports reduce friction during analysis.</div>
+                </div>
             </div>
         </div>
     </section>
 
     <section class="dashboard-stats-grid">
         <article class="card stat-card">
-            <div class="hacker-label">Cases</div>
+            <div class="section-label">Active Cases</div>
             <div class="text-xl font-bold mt-1" id="statsCases">-</div>
             <div class="text-muted text-sm mt-1">Active investigations in workspace.</div>
         </article>
         <article class="card stat-card">
-            <div class="hacker-label">Jobs Running</div>
+            <div class="section-label">Running Jobs</div>
             <div class="text-xl font-bold mt-1" id="statsJobs">-</div>
             <div class="text-muted text-sm mt-1">Modules currently pending or running.</div>
         </article>
         <article class="card stat-card">
-            <div class="hacker-label">Evidence Items</div>
+            <div class="section-label">Evidence Items</div>
             <div class="text-xl font-bold mt-1" id="statsEvidence">-</div>
             <div class="text-muted text-sm mt-1">Files ingested and tracked for custody.</div>
         </article>
         <article class="card stat-card">
-            <div class="hacker-label">Last Sync</div>
+            <div class="section-label">Last Updated</div>
             <div class="text-xl font-bold mt-1 text-mono" id="statsLastSync">--:--:--</div>
             <div class="text-muted text-sm mt-1">UTC snapshot from API endpoints.</div>
         </article>
@@ -61,7 +61,7 @@
     <section class="card">
         <div class="dashboard-table-head">
             <div>
-                <h3>Recent Cases</h3>
+                <h3>Case Directory</h3>
                 <div class="text-muted text-sm mt-1" id="casesStatus">Loading cases and statistics...</div>
             </div>
             <div class="dashboard-filters">
@@ -97,10 +97,10 @@
 <div id="createCaseModal" class="modal-backdrop" hidden>
     <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="createCaseTitle">
         <div class="flex between">
-            <h3 id="createCaseTitle">Create New Case</h3>
+            <h3 id="createCaseTitle">Create Case</h3>
             <button type="button" class="btn btn-sm btn-outline" id="closeCaseModalBtn" data-close-overlay="create-case">Close</button>
         </div>
-        <p class="text-muted text-sm mt-1">Use a descriptive case name to keep evidence and module output searchable.</p>
+        <p class="text-muted text-sm mt-1">Use a clear descriptive name so evidence, jobs, and exports stay easy to review.</p>
         <form id="createCaseForm" class="mt-2">
             <input type="text" id="caseName" placeholder="Case Name (e.g. Credential Theft - 2026-02-14)" required style="width:100%; box-sizing:border-box;">
             <div class="flex mt-2" style="justify-content:flex-end;">
@@ -116,7 +116,6 @@
     const dashboardState = {
         cases: [],
     };
-    const HERO_TERMINAL_PREF_KEY = 'eviforge_hide_hero_terminal';
 
     function esc(value) {
         return String(value ?? '').replace(/[&<>"']/g, (ch) => ({
@@ -148,51 +147,6 @@
         const el = document.getElementById('statsLastSync');
         if (!el) return;
         el.textContent = new Date().toISOString().slice(11, 19);
-    }
-
-    function animateHeroTerminal() {
-        const el = document.getElementById('heroTerminal');
-        if (!el) return;
-        const lines = [
-            '[+] Local vault integrity: PASS',
-            '[+] Chain of custody verifier: ACTIVE',
-            '[+] Job execution mode: AUTO',
-            '[+] API status: READY',
-            '[+] Awaiting operator command...',
-        ];
-        let idx = 0;
-        el.textContent = '';
-        const timer = setInterval(() => {
-            if (idx >= lines.length) {
-                clearInterval(timer);
-                return;
-            }
-            el.textContent += `${lines[idx]}\n`;
-            idx += 1;
-        }, 140);
-    }
-
-    function setHeroTerminalVisible(visible) {
-        const panel = document.getElementById('heroTerminalPanel');
-        const toggle = document.getElementById('toggleHeroTerminalBtn');
-        if (!panel || !toggle) return;
-        panel.hidden = !visible;
-        toggle.textContent = visible ? 'Hide Terminal' : 'Show Terminal';
-        try {
-            localStorage.setItem(HERO_TERMINAL_PREF_KEY, visible ? '0' : '1');
-        } catch (_) {
-            // best-effort only
-        }
-    }
-
-    function applyHeroTerminalPreference() {
-        let hidden = false;
-        try {
-            hidden = localStorage.getItem(HERO_TERMINAL_PREF_KEY) === '1';
-        } catch (_) {
-            hidden = false;
-        }
-        setHeroTerminalVisible(!hidden);
     }
 
     function getFilteredCases() {
@@ -294,21 +248,18 @@
             stats: null,
             cases: [],
             osint: null,
-            admin: null,
         };
 
         try {
-            const [statsRes, casesRes, osintRes, adminRes] = await Promise.all([
+            const [statsRes, casesRes, osintRes] = await Promise.all([
                 apiFetch('/api/cases/stats/overview'),
                 apiFetch('/api/cases'),
                 apiFetch('/web/osint/tools-data'),
-                apiFetch('/web/admin/tools-data'),
             ]);
 
             if (statsRes.ok) snapshot.stats = await statsRes.json();
             if (casesRes.ok) snapshot.cases = await casesRes.json();
             if (osintRes.ok) snapshot.osint = await osintRes.json();
-            if (adminRes.ok) snapshot.admin = await adminRes.json();
 
             const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' });
             const href = URL.createObjectURL(blob);
@@ -372,11 +323,6 @@
 
     document.getElementById('openCreateCaseBtn')?.addEventListener('click', openCreateCaseModal);
     document.getElementById('exportSnapshotBtn')?.addEventListener('click', exportSystemSnapshot);
-    document.getElementById('toggleHeroTerminalBtn')?.addEventListener('click', () => {
-        const panel = document.getElementById('heroTerminalPanel');
-        setHeroTerminalVisible(!!panel?.hidden);
-    });
-    document.getElementById('closeHeroTerminalBtn')?.addEventListener('click', () => setHeroTerminalVisible(false));
     document.getElementById('closeCaseModalBtn')?.addEventListener('click', closeCreateCaseModal);
     document.getElementById('refreshDashboardBtn')?.addEventListener('click', loadDashboard);
     document.getElementById('caseSearchInput')?.addEventListener('input', renderCasesTable);
@@ -402,8 +348,6 @@
         }
     });
 
-    applyHeroTerminalPreference();
-    animateHeroTerminal();
     loadDashboard();
 </script>
 {% endblock %}

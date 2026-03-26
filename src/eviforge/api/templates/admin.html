@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 
-{% block title %}Admin - EviForge{% endblock %}
+{% block title %}Settings - EviForge{% endblock %}
 
 {% block content %}
 <div class="layout-grid" style="min-height:auto; display:block;">
   <div class="flex between mb-4">
     <div>
-      <div class="text-sm text-muted"> <a href="/web">Dashboard</a> / Admin</div>
-      <h2 class="mt-1">System Administration</h2>
+      <div class="text-sm text-muted"> <a href="/web">Dashboard</a> / Settings</div>
+      <h2 class="mt-1">System Settings</h2>
     </div>
     <span class="badge badge-danger">Restricted Area</span>
   </div>
@@ -269,12 +269,12 @@
             <td><code class="text-sm">{{ redis_url }}</code></td>
           </tr>
         </table>
-        <div class="text-muted text-xs mt-2">Tip: set `EVIFORGE_ADMIN_PASSWORD` on first run to bootstrap an admin user.</div>
+        <div class="text-muted text-xs mt-2">Tip: set `EVIFORGE_ADMIN_PASSWORD` on first run to bootstrap the initial owner account.</div>
       </div>
 
       <div class="card">
         <h3>User Management</h3>
-        <div class="text-muted text-sm">Admins can create analysts, reset passwords, and disable accounts.</div>
+        <div class="text-muted text-sm">Authorized managers can create analysts, reset passwords, and disable accounts.</div>
 
         <div id="usersStatus" class="text-muted text-sm mt-2">Loading…</div>
         <div style="overflow-x:auto;">

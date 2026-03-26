@@ -6,15 +6,16 @@
 <div class="osint-shell">
   <div class="card osint-hero">
     <div>
-      <h2>OSINT &amp; Privacy</h2>
+      <div class="section-eyebrow">Privacy Workflow</div>
+      <h2 class="mt-1">Privacy &amp; OSINT request management</h2>
       <p class="text-muted mt-1">
-        Lawful privacy/removal resources and auditable case-linked action tracking. No scraping, covert monitoring, or offensive activity.
+        Track lawful privacy requests, document external submissions, and maintain case-linked records without exposing the workspace to unnecessary noise or offensive tooling.
       </p>
     </div>
     <div class="osint-chip-row">
-      <span class="badge badge-info">Defensive Use</span>
-      <span class="badge badge-success">Case Auditable</span>
-      <span class="badge badge-warning">Manual Operator Control</span>
+      <span class="badge badge-info">Case Linked</span>
+      <span class="badge badge-success">Audit Trail</span>
+      <span class="badge badge-warning">Manual Review</span>
     </div>
   </div>
 
@@ -40,15 +41,15 @@
   <div class="osint-analytics-grid">
     <div class="card" style="margin-bottom:0;">
       <div class="flex between">
-        <h3>Status Graph</h3>
+        <h3>Action Status</h3>
         <span class="text-xs text-muted">Selected case</span>
       </div>
       <div id="osintStatusGraph" class="metric-bar-list mt-2"></div>
     </div>
     <div class="card" style="margin-bottom:0;">
       <div class="flex between">
-        <h3>Provider Graph</h3>
-        <span class="text-xs text-muted">Top providers</span>
+        <h3>Provider Mix</h3>
+        <span class="text-xs text-muted">Current workload</span>
       </div>
       <div id="osintProviderGraph" class="metric-bar-list mt-2"></div>
     </div>
@@ -56,16 +57,16 @@
 
   <div class="osint-layout">
     <aside class="card osint-resources">
-      <h3>External Resources</h3>
-      <div class="text-muted text-sm mt-1">Use external portals directly and track each step in the action log.</div>
+      <h3>Reference Resources</h3>
+      <div class="text-muted text-sm mt-1">Use verified external portals directly, then record each step in the case log.</div>
 
-      <h4 class="mt-2">Integrated Services</h4>
+      <h4 class="mt-2">Connected Services</h4>
       <div id="osintServiceStatus" class="text-muted text-sm mt-1">Checking service integrations...</div>
       <ul id="osintServiceList" class="osint-links mt-1">
         <li class="text-muted">Loading service integrations...</li>
       </ul>
 
-      <h4 class="mt-2">General Privacy</h4>
+      <h4 class="mt-2">Reference Links</h4>
       <ul class="osint-links">
         <li>
           <a href="https://www.consumer.ftc.gov/" target="_blank" rel="noreferrer">
@@ -80,15 +81,15 @@
       </ul>
 
       <div class="osint-note mt-2">
-        Tip: create the action record before external submission so timestamps, status changes, and attachments stay in chain-of-custody.
+        Create the request record before submitting externally so timestamps, status changes, and attachments stay inside the case history.
       </div>
 
       <div class="osint-local-tools mt-2">
         <div class="flex between" style="align-items:center;">
-          <h4 style="margin:0;">Local OSINT Toolkit</h4>
+          <h4 style="margin:0;">Runtime Tool Status</h4>
           <button class="btn btn-sm btn-outline" type="button" id="refreshOsintToolsBtn">Refresh</button>
         </div>
-        <div class="text-muted text-sm mt-1">Runtime availability of local OSINT/privacy helper tools.</div>
+        <div class="text-muted text-sm mt-1">Availability of local helper tools and optional service integrations.</div>
 
         <div class="osint-tool-metrics mt-2">
           <div class="metric-tile">
@@ -130,8 +131,8 @@
     <section class="card osint-workbench">
       <div class="osint-toolbar">
         <div>
-          <h3>Case OSINT Action Tracker</h3>
-          <div class="text-muted text-sm mt-1">Select case, create request, update status, and attach proofs.</div>
+          <h3>Privacy Request Log</h3>
+          <div class="text-muted text-sm mt-1">Select a case, create a record, update status, and attach supporting evidence.</div>
         </div>
         <button class="btn btn-outline btn-sm" type="button" id="refreshCasesBtn">Refresh Cases</button>
       </div>
@@ -143,7 +144,7 @@
       </div>
 
       <div class="card osint-create-card mt-2">
-        <h4>Create Action</h4>
+        <h4>Create Request Record</h4>
         <div class="osint-create-grid mt-2">
           <div>
             <label class="text-sm font-bold text-muted">Provider</label>

@@ -3,28 +3,65 @@
 
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login - EviForge</title>
     <link rel="stylesheet" href="/static/app.css">
 </head>
 
 <body class="dark auth-page">
-    <div class="login-card">
-        <h2>Agent Login</h2>
-        <div id="errorMsg" class="badge badge-danger mb-4"
-            style="display:none; width:100%; box-sizing:border-box; text-align:center; margin-bottom:1rem;"></div>
+    <div class="login-shell">
+        <section class="login-atmosphere">
+            <div class="login-overlay"></div>
+            <div class="login-atmosphere-content login-atmosphere-panel">
+                <div class="section-eyebrow">Secure Access</div>
+                <h1 class="mt-1">Access the EviForge workspace.</h1>
+                <p class="text-muted mt-1">
+                    Professional digital forensics workspace for case review, evidence handling, and documented privacy request workflows.
+                </p>
+                <div class="login-feature-list mt-2">
+                    <div class="login-feature-item">
+                        <strong>Case-linked records</strong>
+                        <span>Track investigations, evidence, and request history in one place.</span>
+                    </div>
+                    <div class="login-feature-item">
+                        <strong>Audit-focused workflows</strong>
+                        <span>Preserve review context with exports, timestamps, and custody-aware actions.</span>
+                    </div>
+                    <div class="login-feature-item">
+                        <strong>Local-first operation</strong>
+                        <span>Designed for controlled environments with minimal surface area.</span>
+                    </div>
+                </div>
+            </div>
+        </section>
 
-        <form id="loginForm" onsubmit="handleLogin(event)">
-            <label class="text-sm font-bold text-muted">Username</label>
-            <input type="text" id="username" name="username" required autofocus
-                style="width:100%; box-sizing:border-box; margin-bottom:1rem;">
+        <section class="login-card">
+            <div class="login-card-header">
+                <div class="section-eyebrow">Sign In</div>
+                <h2 class="mt-1">Continue to the workspace</h2>
+                <p class="text-muted mt-1">Use your assigned credentials to access cases and review workflows.</p>
+            </div>
 
-            <label class="text-sm font-bold text-muted">Password</label>
-            <input type="password" id="password" name="password" required
-                style="width:100%; box-sizing:border-box; margin-bottom:1.5rem;">
+            <div id="errorMsg" class="auth-alert auth-alert-danger mb-4" style="display:none;"></div>
 
-            <button type="submit" class="btn btn-primary"
-                style="width:100%; justify-content:center;">Authenticate</button>
-        </form>
+            <form id="loginForm" class="form-stack" onsubmit="handleLogin(event)">
+                <div>
+                    <label class="text-sm font-bold text-muted" for="username">Username</label>
+                    <input type="text" id="username" name="username" required autofocus style="width:100%; box-sizing:border-box; margin-top:0.4rem;">
+                </div>
+
+                <div>
+                    <label class="text-sm font-bold text-muted" for="password">Password</label>
+                    <input type="password" id="password" name="password" required style="width:100%; box-sizing:border-box; margin-top:0.4rem;">
+                </div>
+
+                <button type="submit" class="btn btn-primary w-full" style="justify-content:center;">Sign In</button>
+            </form>
+
+            <div class="login-help mt-2">
+                First-time deployment? Complete initial setup at <code>/web/setup</code> or define <code>EVIFORGE_ADMIN_PASSWORD</code> and <code>EVIFORGE_SECRET_KEY</code> in the environment.
+            </div>
+        </section>
     </div>
 
     <script>
@@ -58,7 +95,7 @@
                     try {
                         const data = await res.json();
                         if (res.status === 503 && data && data.detail && data.detail.error === 'setup_required') {
-                            msg = "Setup required: create the first admin user at /web/setup (or set EVIFORGE_ADMIN_PASSWORD and restart).";
+                            msg = "Setup required: create the first workspace account at /web/setup, or set EVIFORGE_ADMIN_PASSWORD and restart.";
                         } else if (res.status === 429) {
                             msg = "Too many attempts; try again later.";
                         } else if (res.status === 401) {
@@ -84,7 +121,7 @@
                 const data = await res.json();
                 if (data && data.setup_required) {
                     const errDiv = document.getElementById('errorMsg');
-                    errDiv.innerText = "First-run setup required: open /web/setup to create the first admin user (or set EVIFORGE_ADMIN_PASSWORD and restart).";
+                    errDiv.innerText = "First-run setup required: open /web/setup to create the first workspace account, or set EVIFORGE_ADMIN_PASSWORD and restart.";
                     errDiv.style.display = 'block';
                 }
             } catch { }

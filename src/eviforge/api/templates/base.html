@@ -10,69 +10,47 @@
 </head>
 
 <body>
-    <div class="app-shell">
-        <aside class="sidebar">
-            <div class="sidebar-brand">
-                <a href="/web" class="brand-link">EviForge</a>
-                <div class="hacker-label">Local-first DFIR console</div>
-                <div class="sidebar-pulse">
-                    <span class="pulse-dot"></span>
-                    <span class="text-xs">Secure Local Session</span>
+    <div class="site-shell">
+        <header class="site-header">
+            <div class="site-header-inner">
+                <a href="/web" class="site-brand">
+                    <span class="brand-mark">EF</span>
+                    <span class="brand-copy">
+                        <span class="brand-name">EviForge</span>
+                        <span class="brand-subtitle">Professional digital forensics workspace</span>
+                    </span>
+                </a>
+
+                <nav class="site-nav" aria-label="Primary">
+                    <a href="/web" class="{% if request.url.path == '/web' or request.url.path.startswith('/web/cases') or request.url.path.startswith('/web/jobs') %}active{% endif %}">Dashboard</a>
+                    <a href="/web/osint" class="{% if '/osint' in request.url.path %}active{% endif %}">Privacy Workspace</a>
+                </nav>
+
+                <div class="site-actions">
+                    <span class="status-pill" id="sessionStatus">Guest Session</span>
+                    <span class="status-pill status-time text-mono" id="opsClock">--:-- UTC</span>
+                    <button class="btn btn-sm btn-outline" id="themeToggle" type="button">Appearance</button>
+                    <a class="btn btn-sm btn-outline" href="/web/login" id="loginLink">Sign In</a>
+                    <button class="btn btn-sm btn-outline" id="logoutBtn" type="button" style="display:none;">Sign Out</button>
                 </div>
             </div>
-            <nav class="sidebar-nav">
-                <a href="/web" class="{% if request.url.path == '/web' or request.url.path.startswith('/web/cases') or request.url.path.startswith('/web/jobs') %}active{% endif %}">Cases</a>
-                <a href="/web/osint" class="{% if '/osint' in request.url.path %}active{% endif %}">OSINT &amp; Privacy</a>
-                <a href="/web/admin" class="{% if '/admin' in request.url.path %}active{% endif %}">Admin</a>
-            </nav>
-            <div class="sidebar-shortcuts">
-                <button class="btn btn-sm btn-outline w-full" id="paletteFromSidebar" type="button">Command Palette</button>
-                <div class="text-xs text-muted">`Ctrl/Cmd + K` to jump anywhere.</div>
+            <div class="site-header-meta">
+                <div class="container site-header-meta-inner">
+                    <span id="opsContext">Digital forensics workspace</span>
+                </div>
             </div>
-            <div class="sidebar-footer text-xs text-muted">
-                <div>Offline-first • No telemetry</div>
+        </header>
+
+        <main class="site-main">
+            <div class="container">
+                {% block content %}{% endblock %}
             </div>
-        </aside>
+        </main>
 
-        <div class="main-column">
-            <header class="topbar">
-                <div class="topbar-title">
-                    <h1>EviForge</h1>
-                    <div class="text-xs text-muted topbar-subline" id="opsContext">Operational view</div>
-                </div>
-                <div class="user-menu">
-                    <span class="badge badge-info text-mono" id="opsClock">--:--:-- UTC</span>
-                    <button class="btn btn-sm btn-outline" id="commandPaletteBtn" type="button">Commands</button>
-                    <button class="btn btn-sm btn-outline" id="themeToggle" type="button">Theme</button>
-                    <a class="btn btn-sm btn-outline" href="/web/login" id="loginLink">Login</a>
-                    <button class="btn btn-sm btn-outline" id="logoutBtn" type="button" style="display:none;">Logout</button>
-                </div>
-            </header>
-
-            <main>
-                <div class="container">
-                    {% block content %}{% endblock %}
-                </div>
-            </main>
-
-            <footer class="text-center text-xs text-muted" style="padding: 1rem;">
-                EviForge Community Edition &bull; Local-First DFIR
-            </footer>
-        </div>
+        <footer class="site-footer">
+            <div>Local-first evidence review, chain-of-custody logging, and case-linked workflows.</div>
+        </footer>
     </div>
-
-    <div id="commandPaletteBackdrop" class="command-palette-backdrop" hidden></div>
-    <section id="commandPalette" class="command-palette" hidden aria-hidden="true">
-        <div class="command-palette-head">
-            <div>
-                <div class="hacker-label">Navigation Console</div>
-                <h3>Command Palette</h3>
-            </div>
-            <button type="button" class="btn btn-sm btn-outline" id="closeCommandPalette" data-close-overlay="palette">Close</button>
-        </div>
-        <input id="commandSearch" type="search" autocomplete="off" placeholder="Type a command: dashboard, osint, new case, theme..." />
-        <div id="commandResults" class="command-results"></div>
-    </section>
 
     <div id="toastStack" class="toast-stack" aria-live="polite" aria-atomic="true"></div>
 
@@ -95,16 +73,22 @@
             const token = getAccessToken();
             const loginLink = document.getElementById('loginLink');
             const logoutBtn = document.getElementById('logoutBtn');
-            const paletteBtn = document.getElementById('commandPaletteBtn');
+            const sessionStatus = document.getElementById('sessionStatus');
             if (!loginLink || !logoutBtn) return;
             if (token) {
                 loginLink.style.display = 'none';
                 logoutBtn.style.display = 'inline-flex';
-                if (paletteBtn) paletteBtn.style.display = 'inline-flex';
+                if (sessionStatus) {
+                    sessionStatus.textContent = 'Secure Session';
+                    sessionStatus.className = 'status-pill is-authenticated';
+                }
             } else {
                 loginLink.style.display = 'inline-flex';
                 logoutBtn.style.display = 'none';
-                if (paletteBtn) paletteBtn.style.display = 'inline-flex';
+                if (sessionStatus) {
+                    sessionStatus.textContent = 'Guest Session';
+                    sessionStatus.className = 'status-pill is-guest';
+                }
             }
         }
 
@@ -145,7 +129,7 @@
         function syncThemeButtonLabel() {
             const themeToggle = document.getElementById('themeToggle');
             if (!themeToggle) return;
-            themeToggle.textContent = document.body.classList.contains('dark') ? 'Light Theme' : 'Dark Theme';
+            themeToggle.textContent = document.body.classList.contains('dark') ? 'Light Mode' : 'Dark Mode';
         }
 
         function showToast(message, tone = 'info') {
@@ -165,128 +149,41 @@
             const el = document.getElementById('opsClock');
             if (!el) return;
             const now = new Date();
-            el.textContent = `${now.toISOString().slice(11, 19)} UTC`;
+            el.textContent = `${now.toISOString().slice(11, 16)} UTC`;
         }
 
         function updateOpsContext() {
             const el = document.getElementById('opsContext');
             if (!el) return;
-            const path = window.location.pathname.replace(/^\/web/, '') || '/';
-            el.textContent = `Context: ${path}`;
-        }
-
-        function getPaletteCommands() {
-            return [
-                { label: 'Open Dashboard', keywords: 'home cases dashboard', path: '/web', shortcut: 'Alt+1' },
-                { label: 'Open OSINT Workspace', keywords: 'osint privacy actions', path: '/web/osint', shortcut: 'Alt+2' },
-                { label: 'Open Admin Panel', keywords: 'admin tools modules', path: '/web/admin', shortcut: 'Alt+3' },
-                {
-                    label: 'Create New Case',
-                    keywords: 'new case create',
-                    shortcut: 'Ctrl+N',
-                    action: () => window.dispatchEvent(new CustomEvent('eviforge:new-case')),
-                },
-                {
-                    label: 'Export System Snapshot',
-                    keywords: 'snapshot export json report',
-                    shortcut: 'Alt+S',
-                    action: () => window.dispatchEvent(new CustomEvent('eviforge:export-snapshot')),
-                },
-                {
-                    label: 'Toggle Theme',
-                    keywords: 'dark light appearance',
-                    action: () => toggleTheme(),
-                },
-                {
-                    label: 'Log Out',
-                    keywords: 'logout sign out',
-                    action: async () => {
-                        try { await apiFetch('/api/auth/logout', { method: 'POST' }); } catch { }
-                        clearAccessToken();
-                        window.location.href = '/web/login';
-                    },
-                },
-            ];
-        }
-
-        function renderCommandResults(filter = '') {
-            const host = document.getElementById('commandResults');
-            if (!host) return;
-            const term = (filter || '').trim().toLowerCase();
-            const rows = getPaletteCommands().filter((item) => {
-                const hay = `${item.label} ${item.keywords || ''}`.toLowerCase();
-                return !term || hay.includes(term);
-            });
-            if (!rows.length) {
-                host.innerHTML = '<div class="command-empty">No matching commands.</div>';
+            const path = window.location.pathname || '/web';
+            if (path.startsWith('/web/osint')) {
+                el.textContent = 'Privacy request tracking and lawful OSINT workflows';
                 return;
             }
-            host.innerHTML = rows.map((item, idx) => `
-                <button type="button" class="command-item" data-index="${idx}">
-                    <span>${item.label}</span>
-                    <span class="text-xs text-muted">${item.shortcut || ''}</span>
-                </button>
-            `).join('');
-            const commandList = getPaletteCommands().filter((item) => {
-                const hay = `${item.label} ${item.keywords || ''}`.toLowerCase();
-                return !term || hay.includes(term);
-            });
-            host.querySelectorAll('.command-item').forEach((btn, index) => {
-                btn.addEventListener('click', async () => {
-                    const cmd = commandList[index];
-                    if (!cmd) return;
-                    closeCommandPalette();
-                    if (cmd.path) {
-                        window.location.href = cmd.path;
-                        return;
-                    }
-                    if (typeof cmd.action === 'function') {
-                        await cmd.action();
-                    }
-                });
-            });
-        }
-
-        function openCommandPalette() {
-            const panel = document.getElementById('commandPalette');
-            const backdrop = document.getElementById('commandPaletteBackdrop');
-            const input = document.getElementById('commandSearch');
-            if (!panel || !backdrop || !input) return;
-            const useBackdrop = window.matchMedia('(max-width: 900px)').matches;
-            panel.hidden = false;
-            backdrop.hidden = !useBackdrop;
-            panel.setAttribute('aria-hidden', 'false');
-            input.value = '';
-            renderCommandResults('');
-            setTimeout(() => input.focus(), 10);
-        }
-
-        function isCommandPaletteOpen() {
-            const panel = document.getElementById('commandPalette');
-            return !!panel && !panel.hidden;
-        }
-
-        function closeCommandPalette() {
-            const panel = document.getElementById('commandPalette');
-            const backdrop = document.getElementById('commandPaletteBackdrop');
-            if (!panel || !backdrop) return;
-            panel.hidden = true;
-            backdrop.hidden = true;
-            panel.setAttribute('aria-hidden', 'true');
+            if (path.startsWith('/web/cases/')) {
+                el.textContent = 'Case review, evidence, jobs, and artifacts';
+                return;
+            }
+            if (path.startsWith('/web/login')) {
+                el.textContent = 'Secure sign in';
+                return;
+            }
+            if (path.startsWith('/web/setup')) {
+                el.textContent = 'Initial workspace setup';
+                return;
+            }
+            if (path.startsWith('/web/admin')) {
+                el.textContent = 'System settings';
+                return;
+            }
+            if (path.startsWith('/web/ack')) {
+                el.textContent = 'Authorization acknowledgement';
+                return;
+            }
+            el.textContent = 'Digital forensics workspace';
         }
 
         document.getElementById('themeToggle')?.addEventListener('click', toggleTheme);
-        document.getElementById('commandPaletteBtn')?.addEventListener('click', openCommandPalette);
-        document.getElementById('paletteFromSidebar')?.addEventListener('click', openCommandPalette);
-        document.getElementById('closeCommandPalette')?.addEventListener('click', closeCommandPalette);
-        document.getElementById('commandPaletteBackdrop')?.addEventListener('click', closeCommandPalette);
-        document.getElementById('commandSearch')?.addEventListener('input', (e) => {
-            renderCommandResults(e.target.value || '');
-        });
-        document.addEventListener('click', (event) => {
-            const closeTarget = event.target.closest('[data-close-overlay="palette"]');
-            if (closeTarget) closeCommandPalette();
-        });
 
         document.getElementById('logoutBtn')?.addEventListener('click', async () => {
             try { await apiFetch('/api/auth/logout', { method: 'POST' }); } catch { }
@@ -295,16 +192,6 @@
         });
 
         document.addEventListener('keydown', (event) => {
-            const cmdShortcut = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k';
-            if (cmdShortcut) {
-                event.preventDefault();
-                openCommandPalette();
-                return;
-            }
-            if (event.key === 'Escape') {
-                closeCommandPalette();
-                return;
-            }
             if (event.altKey && event.key.toLowerCase() === 's') {
                 event.preventDefault();
                 window.dispatchEvent(new CustomEvent('eviforge:export-snapshot'));
@@ -312,25 +199,14 @@
             }
             if (event.altKey && event.key === '1') window.location.href = '/web';
             if (event.altKey && event.key === '2') window.location.href = '/web/osint';
-            if (event.altKey && event.key === '3') window.location.href = '/web/admin';
-        });
-
-        window.addEventListener('resize', () => {
-            if (!isCommandPaletteOpen()) return;
-            // Re-open to recalc desktop/mobile dock behavior.
-            closeCommandPalette();
-            openCommandPalette();
         });
 
         window.showToast = showToast;
-        window.openCommandPalette = openCommandPalette;
-        window.closeCommandPalette = closeCommandPalette;
 
         initTheme();
         refreshAuthUI();
         updateOpsClock();
         updateOpsContext();
-        renderCommandResults('');
         setInterval(updateOpsClock, 1000);
     </script>
 

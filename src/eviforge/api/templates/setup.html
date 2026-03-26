@@ -15,7 +15,7 @@
   <div class="card">
     <h3>Why you’re seeing this</h3>
     <div class="text-muted text-sm">
-      EviForge has no users yet. Create the first admin user to proceed.
+      EviForge has no workspace account yet. Create the first owner account to proceed.
     </div>
   </div>
 
@@ -43,9 +43,9 @@ EVIFORGE_SECRET_KEY=&lt;long random secret&gt;</pre>
 
       <form id="bootstrapForm" class="mt-2" style="display:none;">
         <div class="flex" style="flex-wrap:wrap; gap:0.5rem;">
-          <input id="bootstrapUsername" placeholder="admin username" value="admin" required>
+          <input id="bootstrapUsername" placeholder="account username" value="admin" required>
           <input id="bootstrapPassword" type="password" placeholder="password (min 12 chars)" required>
-          <button class="btn btn-primary" type="submit">Create Admin</button>
+          <button class="btn btn-primary" type="submit">Create Account</button>
         </div>
         <div id="bootstrapMsg" class="text-muted text-sm mt-2"></div>
       </form>
@@ -75,7 +75,7 @@ EVIFORGE_SECRET_KEY=&lt;long random secret&gt;</pre>
       form.style.display = 'none';
       return;
     }
-    el.textContent = 'Bootstrap enabled. Create the first admin user below.';
+    el.textContent = 'Bootstrap enabled. Create the first workspace account below.';
     form.style.display = 'block';
   }
 
@@ -95,11 +95,10 @@ EVIFORGE_SECRET_KEY=&lt;long random secret&gt;</pre>
       msg.textContent = (data && data.detail && (data.detail.hint || data.detail.error || data.detail)) ? JSON.stringify(data.detail) : 'Failed';
       return;
     }
-    msg.textContent = 'Admin created. Redirecting to login…';
+    msg.textContent = 'Account created. Redirecting to login…';
     setTimeout(() => window.location.href = '/web/login', 700);
   });
 
   loadBootstrapStatus();
 </script>
 {% endblock %}
-
